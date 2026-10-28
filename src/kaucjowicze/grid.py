@@ -26,7 +26,10 @@ class Grid:
 
     def add_obstacle(self, x: int, y: int, w: int, h: int) -> None:
         """Mark a rectangle (clipped to the map) as an obstacle."""
-        self.obstacles[max(y, 0) : y + h, max(x, 0) : x + w] = True
+        x0, x1 = max(x, 0), min(x + w, self.width)
+        y0, y1 = max(y, 0), min(y + h, self.height)
+        if x0 < x1 and y0 < y1:
+            self.obstacles[y0:y1, x0:x1] = True
 
     def add_base(self, pos: Position) -> None:
         if not self.is_free(pos):
@@ -42,7 +45,9 @@ class Grid:
         self.cans[pos[1], pos[0]] += count
 
     def take_can(self, pos: Position) -> bool:
-        """Remove one can from the cell. Returns False if there was none."""
+        """Remove one can from the cell. Returns False if there was none or pos is off the map."""
+        if not self.in_bounds(pos):
+            return False
         x, y = pos
         if self.cans[y, x] == 0:
             return False

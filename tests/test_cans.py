@@ -31,7 +31,7 @@ def test_same_seed_gives_same_map():
 
 
 def test_test_map_has_reachable_base():
-    config, grid = _generate(seed=3)
+    _, grid = _generate(seed=3)
     assert len(grid.bases) == 1
     assert grid.is_free(grid.bases[0])
 
