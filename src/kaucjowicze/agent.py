@@ -22,3 +22,4 @@ class Agent:
     trips: int = 0  # number of deliveries to a base
     steps_without_can: int = 0  # steps since the agent last saw a can
     heading: Position | None = None  # last movement direction, used by the random walk
+    source_cans: int = 0  # cans seen left behind at the last pick-up; sets trail strength

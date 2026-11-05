@@ -9,7 +9,12 @@ import numpy as np
 from kaucjowicze.agent import Agent, AgentState
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.grid import Grid, Position
-from kaucjowicze.pathfinding import distance_map, first_step_to_nearest_can, step_towards_base
+from kaucjowicze.pathfinding import (
+    distance_map,
+    first_step_to_nearest_can,
+    step_towards_base,
+    visible_cans,
+)
 from kaucjowicze.policies import MovementPolicy
 
 
@@ -20,9 +25,13 @@ class Simulation:
         grid: Grid,
         policy: MovementPolicy,
         rng: np.random.Generator,
+        pheromone: np.ndarray | None = None,
     ) -> None:
+        """`pheromone` is an array [y, x] updated in place; `None` means no trails are left."""
         if not grid.bases:
             raise ValueError("Grid must have at least one base")
+        if pheromone is not None and pheromone.shape != (grid.height, grid.width):
+            raise ValueError(f"Pheromone shape {pheromone.shape} does not match the grid")
         self.config = config
         self.grid = grid
         self.policy = policy
@@ -34,7 +43,7 @@ class Simulation:
         self.initial_cans = grid.total_cans
         self.collected = 0
         self.step_count = 0
-        self.pheromone: np.ndarray | None = None  # [y, x]; None when the policy uses no trails
+        self.pheromone = pheromone
 
     @property
     def is_finished(self) -> bool:
@@ -52,6 +61,8 @@ class Simulation:
                 self._search(agent)
             else:
                 self._carry(agent)
+        if self.pheromone is not None:
+            self.pheromone *= 1.0 - self.config.evaporation_rate
         self.step_count += 1
 
     def _search(self, agent: Agent) -> None:
@@ -60,6 +71,7 @@ class Simulation:
             self.grid.take_can(agent.pos)
             agent.bag += 1
             agent.steps_without_can = 0
+            agent.source_cans = visible_cans(self.grid, agent.pos, self.config.vision_radius)
             if agent.bag >= self.config.bag_capacity:
                 agent.state = AgentState.CARRYING
             return
@@ -76,9 +88,16 @@ class Simulation:
 
     def _carry(self, agent: Agent) -> None:
         if not self.grid.is_base(agent.pos):
+            self._lay_trail(agent)
             self._move(agent, step_towards_base(self.grid, self.distance, agent.pos))
         if self.grid.is_base(agent.pos):
             self._deposit(agent)
+
+    def _lay_trail(self, agent: Agent) -> None:
+        """Mark the cell being left, so the trail reaches the source and spares the base."""
+        if self.pheromone is not None:
+            x, y = agent.pos
+            self.pheromone[y, x] += self.config.trail_deposit * agent.source_cans
 
     def _deposit(self, agent: Agent) -> None:
         self.collected += agent.bag
@@ -86,6 +105,7 @@ class Simulation:
         agent.bag = 0
         agent.trips += 1
         agent.steps_without_can = 0
+        agent.source_cans = 0
         agent.state = AgentState.SEARCHING
 
     @staticmethod
