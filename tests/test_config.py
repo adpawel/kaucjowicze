@@ -51,3 +51,22 @@ def test_default_pheromone_parameters_match_milestones():
 def test_invalid_pheromone_parameters_rejected(kwargs):
     with pytest.raises(ValueError):
         SimulationConfig(**kwargs)
+
+
+def test_crowd_avoidance_is_on_by_default():
+    config = SimulationConfig()
+    assert config.crowd_radius >= 0
+    assert 0.0 <= config.crowd_penalty < 1.0
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"crowd_radius": -1},
+        {"crowd_penalty": -0.1},
+        {"crowd_penalty": 1.1},
+    ],
+)
+def test_invalid_crowd_parameters_rejected(kwargs):
+    with pytest.raises(ValueError):
+        SimulationConfig(**kwargs)

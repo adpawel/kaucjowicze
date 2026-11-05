@@ -51,9 +51,17 @@ This builds the test map, scatters cans and runs a headless simulation: agents s
 Options:
 
 - `--algorithm random|aco`: movement policy, the random-walk baseline (default) or ACO,
+- `--reward shared|individual`: reward of ACO agents, shared by default (not available for the random walk),
 - `--show-map`: print the map before the run (`#` obstacle, `B` base, digits = number of cans, `+` more than 9, `.` empty).
 
 With `--algorithm aco` an agent walking home leaves a trail on its way, as strong as the number of cans it saw left at the source, so an exhausted source leaves none. Trails evaporate every step. A searching agent follows trails leading away from the base, making a random move instead with probability epsilon. Where there is no trail it explores exactly like the random walk.
+
+The reward decides how agents behave:
+
+- `shared`: all delivered cans are split equally. Agents lay and follow trails as described above, and ignore a trail heading into an area with more searching agents than cans.
+- `individual`: each agent keeps what it delivered. Agents leave no trails, so there is no pheromone. Each one remembers its richest source and returns there by the shortest path until the source is exhausted, regardless of the others.
+
+The summary also prints the reward per agent for these variants.
 
 Default parameters (number of agents, bag capacity, vision radius, pheromone, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
 
@@ -63,17 +71,17 @@ The window needs Pygame, which is an optional dependency:
 
 ```bash
 pip install -e ".[dev,gui]"
-python -m kaucjowicze --algorithm aco --seed 0 --gui
+python -m kaucjowicze --algorithm aco --reward shared --seed 0 --gui
 ```
 
-The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows), pheromone (green, ACO only) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
+The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows), pheromone (green, shared reward only) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
 
 | Key | Action |
 |---|---|
 | Space | pause / resume |
 | `+` / `-` | faster / slower (1 to 500 steps per second) |
 | `R` | restart with the same seed |
-| `P` | show / hide the pheromone heat map (`n/a` for the random walk) |
+| `P` | show / hide the pheromone heat map (`n/a` for the random walk and the individual reward) |
 | `Esc` | quit |
 
 ### 5. Run tests and linters

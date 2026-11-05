@@ -1,9 +1,10 @@
-"""Grid search helpers: distance map to the nearest base and local search for visible cans.
+"""Grid search helpers: distance maps to chosen cells and local search for visible cans.
 
 Movement uses the 8-neighbourhood; every move (straight or diagonal) costs one step.
 """
 
 from collections import deque
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -30,17 +31,17 @@ def free_neighbours(grid: Grid, pos: Position) -> list[Position]:
     return [(x + dx, y + dy) for dx, dy in NEIGHBOURS if grid.is_free((x + dx, y + dy))]
 
 
-def distance_map(grid: Grid) -> np.ndarray:
-    """Steps from every cell to the nearest base (multi-source BFS).
+def distance_map(grid: Grid, sources: Iterable[Position] | None = None) -> np.ndarray:
+    """Steps from every cell to the nearest of `sources`, by default the bases (multi-source BFS).
 
     Returns an int32 array indexed [y, x]; obstacles and unreachable cells are `UNREACHABLE`.
     """
     dist = np.full((grid.height, grid.width), UNREACHABLE, dtype=np.int32)
     queue: deque[Position] = deque()
-    for base in grid.bases:
-        if dist[base[1], base[0]] == UNREACHABLE:
-            dist[base[1], base[0]] = 0
-            queue.append(base)
+    for source in grid.bases if sources is None else sources:
+        if dist[source[1], source[0]] == UNREACHABLE:
+            dist[source[1], source[0]] = 0
+            queue.append(source)
 
     while queue:
         pos = queue.popleft()
@@ -52,8 +53,8 @@ def distance_map(grid: Grid) -> np.ndarray:
     return dist
 
 
-def step_towards_base(grid: Grid, dist: np.ndarray, pos: Position) -> Position:
-    """Neighbour one step closer to a base; `pos` if already at a base or unreachable."""
+def step_closer(grid: Grid, dist: np.ndarray, pos: Position) -> Position:
+    """Neighbour one step closer to a source of `dist`; `pos` if already there or unreachable."""
     best = pos
     best_dist = dist[pos[1], pos[0]]
     if best_dist <= 0:
@@ -70,7 +71,7 @@ def _view_window(grid: Grid, pos: Position, radius: int) -> np.ndarray:
     return grid.cans[max(y - radius, 0) : y + radius + 1, max(x - radius, 0) : x + radius + 1]
 
 
-def _within(center: Position, pos: Position, radius: int) -> bool:
+def within_radius(center: Position, pos: Position, radius: int) -> bool:
     return max(abs(pos[0] - center[0]), abs(pos[1] - center[1])) <= radius
 
 
@@ -95,7 +96,7 @@ def first_step_to_nearest_can(grid: Grid, pos: Position, radius: int) -> Positio
     first_step: dict[Position, Position] = {}
     queue: deque[Position] = deque()
     for nb in free_neighbours(grid, pos):
-        if _within(pos, nb, radius):
+        if within_radius(pos, nb, radius):
             first_step[nb] = nb
             queue.append(nb)
 
@@ -104,7 +105,7 @@ def first_step_to_nearest_can(grid: Grid, pos: Position, radius: int) -> Positio
         if grid.cans[cell[1], cell[0]] > 0:
             return first_step[cell]
         for nb in free_neighbours(grid, cell):
-            if nb != pos and nb not in first_step and _within(pos, nb, radius):
+            if nb != pos and nb not in first_step and within_radius(pos, nb, radius):
                 first_step[nb] = first_step[cell]
                 queue.append(nb)
     return None

@@ -5,6 +5,7 @@ import types
 import pytest
 
 from kaucjowicze.__main__ import build_simulation, main
+from kaucjowicze.policies import AcoPolicy, IndividualPolicy
 
 
 def _fake_gui(monkeypatch) -> list[dict]:
@@ -111,3 +112,72 @@ def test_aco_restart_reproduces_the_run(monkeypatch):
         b.step()
     assert [agent.pos for agent in a.agents] == [agent.pos for agent in b.agents]
     assert (a.pheromone == b.pheromone).all()
+
+
+def test_aco_uses_the_shared_reward_by_default():
+    assert isinstance(build_simulation("aco", seed=0).policy, AcoPolicy)
+    assert isinstance(build_simulation("aco", seed=0, reward="shared").policy, AcoPolicy)
+
+
+def test_individual_reward_leaves_no_trails():
+    sim = build_simulation("aco", seed=0, reward="individual")
+    assert isinstance(sim.policy, IndividualPolicy)
+    assert sim.pheromone is None
+
+
+def test_random_walk_has_no_reward_variants():
+    with pytest.raises(ValueError, match="reward"):
+        build_simulation("random", seed=0, reward="shared")
+
+
+def test_build_simulation_rejects_unknown_reward():
+    with pytest.raises(ValueError, match="Unknown reward"):
+        build_simulation("aco", seed=0, reward="nope")
+
+
+@pytest.mark.parametrize("reward", ["shared", "individual"])
+def test_reward_variant_runs_from_command_line(capsys, reward):
+    main(["--algorithm", "aco", "--reward", reward, "--seed", "0"])
+    output = capsys.readouterr().out
+    assert f"reward: {reward}" in output
+    assert "Collected" in output
+    assert "Reward per agent: min" in output
+
+
+def test_random_walk_output_shows_no_reward(capsys):
+    main(["--seed", "0"])
+    assert "eward" not in capsys.readouterr().out
+
+
+def test_reward_with_random_walk_is_a_usage_error(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--algorithm", "random", "--reward", "shared", "--seed", "0"])
+    assert exc.value.code != 0
+    assert "--reward" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("args", "variant"),
+    [
+        (["--algorithm", "random"], "random"),
+        (["--algorithm", "aco"], "aco/shared"),
+        (["--algorithm", "aco", "--reward", "shared"], "aco/shared"),
+        (["--algorithm", "aco", "--reward", "individual"], "aco/individual"),
+    ],
+)
+def test_window_shows_the_variant_name(monkeypatch, args, variant):
+    calls = _fake_gui(monkeypatch)
+    main([*args, "--seed", "5", "--gui"])
+    assert calls[0]["variant"] == variant
+
+
+def test_individual_restart_reproduces_the_run(monkeypatch):
+    calls = _fake_gui(monkeypatch)
+    main(["--algorithm", "aco", "--reward", "individual", "--seed", "5", "--gui"])
+    make_sim = calls[0]["make_sim"]
+    a, b = make_sim(), make_sim()
+    assert isinstance(a.policy, IndividualPolicy)
+    for _ in range(200):
+        a.step()
+        b.step()
+    assert [agent.pos for agent in a.agents] == [agent.pos for agent in b.agents]

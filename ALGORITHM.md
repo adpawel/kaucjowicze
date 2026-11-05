@@ -17,8 +17,10 @@ Nową decyzję dopisujemy w tej samej gałęzi, która ją wprowadza.
 | ε | `exploration_rate` | 0.1 | prawdopodobieństwo losowego ruchu |
 | r | `vision_radius` | 2 | promień widzenia (odległość Czebyszewa) |
 | p | `direction_persistence` | 0.5 | skłonność do utrzymania kierunku |
+| R | `crowd_radius` | 3 | połowa szerokości okna, w którym agent sprawdza tłok |
+| λ | `crowd_penalty` | 0.0 | mnożnik śladu przed tłokiem (1 wyłącza unikanie tłoku) |
 
-Wartości q i p nie pochodzą z `MILESTONES.md` (p ustalono w `feat/agents-random`, q w `feat/aco`). Pozostałe są z tego dokumentu.
+Wartości q, p, R i λ nie pochodzą z `MILESTONES.md` (p ustalono w `feat/agents-random`, q w `feat/aco`, R i λ w `feat/rewards`). Pozostałe są z tego dokumentu.
 
 ---
 
@@ -115,6 +117,8 @@ Wizualizacja normalizuje feromon liniowo do bieżącego maksimum: τ / max τ. J
 
 Pomiar z 5 listopada 2026 na mapie testowej: wartości domyślne oprócz wskazanych, 20 agentów, 270 puszek, T = 3000, ziarna 0–29. Skrypt był jednorazowy i nie ma go w repozytorium, więc liczby są poglądowe. Właściwe porównanie przyjdzie z `feat/metrics-experiments`.
 
+Pomiar pochodzi sprzed `feat/rewards`, więc „ACO (domyślne)” oznacza tu ACO bez unikania tłoku. Obecnie odpowiada to λ = 1, co daje te same wyniki (punkt 10).
+
 | Wariant | t₅₀ | t₉₀ (± 95%) | Trasa na puszkę | Lepsze t₉₀ niż losowy spacer |
 |---|---|---|---|---|
 | losowy spacer | 474 | 1657 ± 214 | 197 | — |
@@ -142,3 +146,80 @@ Wszystkie puszki zebrano na 22/30 ziaren w losowym spacerze i na 28/30 w ACO z w
 Te wyniki to głównie zmienność między przebiegami, a nie słabość ACO na tych mapach.
 
 **Znane ograniczenie: późne odkrywanie skupisk.** W przebiegu na ziarnie 9 zostało 41 puszek w rogu mapy, czyli niemal całe jedno skupisko. Agenci nie utknęli: spędzili w pobliżu tych puszek tylko 5 z 60 000 kroków agentów, a przez większość czasu byli w zachodniej połowie mapy. Feromon pomaga wracać do znalezionych skupisk, ale nie pomaga znaleźć nowych. Eksploracja bez śladu to nadal błądzenie, więc nieodkryte skupisko może przetrwać do T.
+
+## 8. Nagroda wspólna N1: unikanie tłoku
+
+`MILESTONES.md` mówi: „gdy w okolicy skupiska jest więcej agentów niż puszek do zebrania, wybór tego kierunku dostaje karę”. Nie określa, czym jest okolica ani jak duża jest kara. Przyjęliśmy, że dla ruchu z komórki c na sąsiada n w kierunku v = n − c okolicą jest kwadratowe okno o środku i promieniu (odległość Czebyszewa):
+
+```
+a = c + (R + 1) · v      promień R
+```
+
+W oknie liczymy puszki C oraz agentów w stanie `SEARCHING` S. Kierunek jest zatłoczony, gdy `C > 0` i `S > C`. Wtedy w punkcie 4 zamiast τ_out(n) używamy:
+
+```
+τ_out(n) ← λ · τ_out(n)
+```
+
+Kara działa przed progiem z kroku 2, więc przy λ = 0 agent, któremu zostały same zatłoczone kierunki, porusza się jak w losowym spacerze, czyli „szuka gdzie indziej”.
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Okno leży przed agentem, a nie wokół sąsiada | Okna wokół sąsiednich komórek prawie się pokrywają, więc kara dotykałaby wszystkich kierunków po równo i niczego by nie zmieniała. Przesunięte okno odpowiada za konkretny kierunek. Komórka c nie należy do żadnego okna, więc agent nie liczy sam siebie |
+| Warunek C > 0 | Bez niego agenci idący jeden za drugim po śladzie do dalekiego skupiska zniechęcaliby się nawzajem, bo w połowie drogi puszek nie ma. Takie okno nie jest okolicą skupiska |
+| Liczymy tylko agentów `SEARCHING` | Agent `CARRYING` właśnie odchodzi i nie zabierze już żadnej puszki |
+| S > C, bez uwzględniania wolnego miejsca w workach | Dosłownie według `MILESTONES.md`: więcej agentów niż puszek |
+| Kara dotyczy tylko śladu | Bez śladu agent ma się poruszać jak w losowym spacerze (punkt 5). Waga τ₀ zostaje, więc kierunek nie jest zabroniony |
+| Widoczna puszka nadal wygrywa | Agent, który widzi puszkę, idzie po nią bez pytania polityki. Omijanie puszki w zasięgu niczego by nie przyspieszyło |
+| R = 3 | Równe `cluster_spread`, czyli odchyleniu standardowemu skupiska. Wartość dobrana ad hoc: pomiar w punkcie 10 nie odróżnia R = 2, 3 i 5 |
+| λ = 0 | Ślady sięgają kilkudziesięciu jednostek (szczyt 11–29 na ziarnach 0–9), a τ₀ = 0.01, więc umiarkowana kara prawie nie zmienia wyboru. Przy τ = 20 i λ = 0.1 kierunek nadal dostaje około 97% wagi wśród 8 sąsiadów. Wartość też ad hoc: pomiar nie odróżnia λ = 0, 0.1 i 0.5 |
+
+**Uproszczenie:** tak jak w punkcie 2 okno nie uwzględnia ścian, a agent „widzi” tłok dalej niż puszki (do 2R + 1 = 7 komórek przy r = 2). Tłum widać z większej odległości niż puszkę, ale przy prawdziwej mapie MS AGH trzeba do tego wrócić.
+
+## 9. Nagroda indywidualna N2: pamięć prywatna
+
+Agent N2 nie zostawia śladu, dlatego symulacja w tym wariancie w ogóle nie ma pola feromonu. Gdy nic nie pamięta, porusza się jak w losowym spacerze. Gdy pamięta źródło, idzie do niego najkrótszą drogą, bez ε i bez sprawdzania tłoku.
+
+`MILESTONES.md` nie definiuje „najlepszego skupiska”. Pamięć to para (komórka m, liczba puszek n_m). Po każdym podniesieniu puszki na komórce c, gdy w oknie o promieniu r zostało n puszek (ta sama wartość co w punkcie 2):
+
+```
+jeśli nic nie pamięta  lub  n ≥ n_m  lub  odległość(c, m) ≤ r:
+    m ← c, n_m ← n      (a przy n = 0: agent zapomina)
+```
+
+Agent zapomina źródło także wtedy, gdy na nie dojdzie i nie widzi tam żadnej puszki.
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Jakość źródła to liczba puszek w zasięgu wzroku | Agent nie zna rozmiaru całego skupiska. To ta sama miara, która w N1 ustala siłę śladu |
+| n ≥ n_m, a nie n > n_m | Przy remisie nowsza informacja jest lepsza |
+| Warunek odległość(c, m) ≤ r | Agent jest na miejscu, więc to, co widzi, zastępuje starą liczbę, także gdy jest mniejsza. Inaczej liczba z pierwszej wizyty blokowałaby zmianę źródła na lepsze, gdy pamiętane jest już prawie puste |
+| Pojedyncza puszka daleko od źródła (n = 0) nie kasuje pamięci | Mówi coś tylko o tamtym miejscu |
+| Agent idzie po widoczną puszkę także w drodze do źródła | Ta sama reguła widzenia co u pozostałych. Później wraca na trasę do źródła |
+
+Trasa korzysta z mapy odległości od m (przeszukiwanie wszerz jak w punkcie 1), liczonej przy pierwszym użyciu danej komórki i zapamiętywanej. Przebieg N2 trwa około 3,2 s, a losowego spaceru około 1,9 s.
+
+**Nagrody liczone po przebiegu:** N1 to `R_i = (wszystkie oddane puszki) / N`, a N2 to `R_i = (puszki oddane przez i)`. Puszki w worku jeszcze się nie liczą.
+
+## 10. Porównanie nagród (pomiar kontrolny)
+
+Pomiar z 5 listopada 2026 w tych samych warunkach co w punkcie 7 (30 ziaren, t₉₀ = T, jeśli nie osiągnięto 90%). Skrypt był jednorazowy, a liczby są poglądowe. Nie wykonano testu istotności.
+
+| Wariant | t₅₀ | t₉₀ (± 95%) | Trasa na puszkę | Gini | Min / max puszek na agenta | Pełna zbiórka | Lepsze t₉₀ niż losowy spacer |
+|---|---|---|---|---|---|---|---|
+| losowy spacer | 474 | 1657 ± 214 | 197 | 0.37 | 0.7 / 31.5 | 22/30 | — |
+| **N2 (indywidualna)** | **326** | **816 ± 107** | **133** | **0.56** | **0.2 / 48.4** | **28/30** | **28/30** |
+| ACO bez unikania tłoku (λ = 1) | 307 | 822 ± 179 | 109 | 0.38 | 0.6 / 33.9 | 28/30 | 28/30 |
+| **N1 (wspólna, R = 3, λ = 0)** | **308** | **790 ± 104** | **110** | **0.40** | **0.7 / 36.6** | **29/30** | **29/30** |
+| N1, R = 3, λ = 0.1 | 299 | 897 ± 187 | 121 | 0.40 | 0.5 / 36.1 | 29/30 | 27/30 |
+| N1, R = 3, λ = 0.5 | 303 | 826 ± 186 | 108 | 0.38 | 0.6 / 33.8 | 29/30 | 28/30 |
+| N1, R = 2, λ = 0 | 301 | 812 ± 108 | 120 | 0.39 | 0.5 / 36.2 | 30/30 | 28/30 |
+| N1, R = 5, λ = 0 | 303 | 742 ± 97 | 116 | 0.40 | 0.6 / 36.0 | 28/30 | 29/30 |
+
+Średnie min i max liczymy po przebiegach. Gini liczymy z puszek oddanych przez agentów, także w N1, gdzie nagroda jest z definicji równa, bo mierzy on, kto faktycznie zbierał.
+
+**Wnioski z tego pomiaru:**
+
+- **Hipoteza o nierówności N2 się potwierdza:** Gini 0.56 wobec 0.40 w N1.
+- **Hipoteza o wolniejszym N2 się nie potwierdza.** t₉₀ jest takie samo w granicach przedziałów ufności (816 ± 107 wobec 790 ± 104). Prawdopodobnie pamięć prywatna daje wiele z tego, co ślad, bo agent też wraca do znanego skupiska. Różnicę widać w trasie na puszkę (133 wobec 110) i w t₅₀ (326 wobec 308), ale to nadal bez testu istotności.
+- **Unikanie tłoku prawie nie działa przy obecnych parametrach.** Na tych 30 ziarnach kierunek był zatłoczony średnio 9,6 razy na przebieg, czyli przy 0,44% z około 2180 decyzji o śladzie. Skupiska mają po 40 puszek, a agentów jest 20, więc warunek S > C zachodzi prawdopodobnie dopiero przy końcu skupiska. Różnice między wariantami N1 mieszczą się w szumie, więc nie ma podstaw do twierdzenia, że kara pomaga ani że szkodzi. Porównanie P2 mierzy więc głównie ślad kontra pamięć, a nie tłok. Można to sprawdzić przy większej liczbie agentów (Część II w `MILESTONES.md`).

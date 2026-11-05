@@ -23,3 +23,5 @@ class Agent:
     steps_without_can: int = 0  # steps since the agent last saw a can
     heading: Position | None = None  # last movement direction, used by the random walk
     source_cans: int = 0  # cans seen left behind at the last pick-up; sets trail strength
+    remembered_source: Position | None = None  # private memory of the richest known source
+    remembered_cans: int = 0  # cans the agent last saw left at the remembered source
