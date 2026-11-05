@@ -115,7 +115,7 @@ Wizualizacja normalizuje feromon liniowo do bieżącego maksimum: τ / max τ. J
 
 ## 7. Wyniki kontrolne
 
-Pomiar z 5 listopada 2026 na mapie testowej: wartości domyślne oprócz wskazanych, 20 agentów, 270 puszek, T = 3000, ziarna 0–29. Skrypt był jednorazowy i nie ma go w repozytorium, więc liczby są poglądowe. Właściwe porównanie przyjdzie z `feat/metrics-experiments`.
+Pomiar z 5 listopada 2026 na mapie testowej: wartości domyślne oprócz wskazanych, 20 agentów, 270 puszek, T = 3000, ziarna 0–29. Skrypt był jednorazowy i nie ma go w repozytorium, więc liczby są poglądowe. Właściwe porównanie jest w punkcie 12.
 
 Pomiar pochodzi sprzed `feat/rewards`, więc „ACO (domyślne)” oznacza tu ACO bez unikania tłoku. Obecnie odpowiada to λ = 1, co daje te same wyniki (punkt 10).
 
@@ -223,3 +223,57 @@ Pomiar z 5 listopada 2026 w tych samych warunkach co w punkcie 7 (30 ziaren, t�
 - **Hipoteza o nierówności N2 się potwierdza:** Gini 0.56 wobec 0.40 w N1.
 - **Hipoteza o wolniejszym N2 się nie potwierdza.** t₉₀ jest takie samo w granicach przedziałów ufności (816 ± 107 wobec 790 ± 104). Prawdopodobnie pamięć prywatna daje wiele z tego, co ślad, bo agent też wraca do znanego skupiska. Różnicę widać w trasie na puszkę (133 wobec 110) i w t₅₀ (326 wobec 308), ale to nadal bez testu istotności.
 - **Unikanie tłoku prawie nie działa przy obecnych parametrach.** Na tych 30 ziarnach kierunek był zatłoczony średnio 9,6 razy na przebieg, czyli przy 0,44% z około 2180 decyzji o śladzie. Skupiska mają po 40 puszek, a agentów jest 20, więc warunek S > C zachodzi prawdopodobnie dopiero przy końcu skupiska. Różnice między wariantami N1 mieszczą się w szumie, więc nie ma podstaw do twierdzenia, że kara pomaga ani że szkodzi. Porównanie P2 mierzy więc głównie ślad kontra pamięć, a nie tłok. Można to sprawdzić przy większej liczbie agentów (Część II w `MILESTONES.md`).
+
+## 11. Metryki i metoda porównań
+
+Metryki liczy `metrics.py`, a testy i przedziały ufności `plots.py`. Zapis metryk tylko czyta stan symulacji, więc nie zmienia przebiegu.
+
+| Metryka | Definicja | Uzasadnienie |
+|---|---|---|
+| Zebrane puszki | Puszki oddane w bazie. Puszki w worku się nie liczą | Tak samo działa warunek końca symulacji i nagrody (punkt 9) |
+| t₅₀, t₉₀, t₁₀₀ | Pierwszy krok, po którym oddano co najmniej ⌈X% · puszki⌉. Pusta wartość, jeśli nie nastąpiło to do T | Próg liczymy na liczbach całkowitych, żeby błąd zaokrąglenia nie przesunął dokładnego progu, np. 243 z 270 |
+| Trasa na puszkę | Wszystkie ruchy wszystkich agentów / oddane puszki, liczone dla przebiegu, a potem uśredniane. Pusta wartość, jeśli nie oddano żadnej puszki | Liczymy też ruchy po ostatnim oddaniu, bo agent i tak je wykonał |
+| Gini | `G = Σᵢ Σⱼ abs(xᵢ − xⱼ) / (2 n Σ x)` z puszek oddanych przez agentów. G = 0, gdy nikt nic nie oddał | Wersja bez korekty n / (n − 1), więc maksimum to (n − 1) / n, czyli 0.95 przy 20 agentach |
+
+**Przebiegi poniżej progu.** Do średniej, przedziału ufności i testu przebieg, który nie osiągnął progu, wchodzi jako t = T (jak w punkcie 7). Średnia jest przez to zaniżona dla wariantów, które często nie osiągają progu, dlatego raportujemy też liczbę przebiegów, które go osiągnęły. Test rangowy jest na to mniej wrażliwy: taki przebieg dostaje po prostu najgorszą rangę.
+
+**Przedział ufności 95%:** `x̄ ± t₀.₉₇₅,ₙ₋₁ · s / √n`, czyli z rozkładu t-Studenta. Przy n = 30 kwantyl wynosi 2.045. Przedziały w punktach 7 i 10 są o około 4% węższe, co odpowiada kwantylowi 1.96. To wniosek z samych liczb, bo tamtego skryptu nie ma w repozytorium.
+
+**Krzywa zbierania.** Przebieg, który skończył się przed T, zostaje do końca wykresu na swojej końcowej wartości. Bez tego najszybsze przebiegi wypadałyby ze średniej, a krzywa pod koniec by spadała. Pasmo liczymy osobno dla każdego kroku tym samym wzorem. Nie przycinamy go do liczby puszek, więc pod koniec może nieznacznie ją przekraczać.
+
+**Test istotności.** Dwustronny test Manna-Whitneya, jak w `MILESTONES.md`, dla t₉₀ oraz Giniego. Test nie korzysta z tego, że warianty mają te same mapy. Test parami (np. Wilcoxona) mógłby mieć większą moc, ale zostajemy przy ustalonym planie. Nie stosujemy korekty na wielokrotne porównania, więc p-wartości trzeba czytać z tym zastrzeżeniem.
+
+**Rozkład puszek na agenta.** Wykres pudełkowy łączy agentów ze wszystkich przebiegów wariantu (600 wartości). Agenci jednego przebiegu nie są niezależni, więc wykres jest tylko opisowy, a test wykonujemy na Ginim liczonym dla przebiegu.
+
+**Format CSV.** Kolumny są zgodne z `PLAN.md`, rozdział 7, z kolumną `reward` z `MILESTONES.md`. Dodatkowo:
+
+- `max_steps` jest potrzebne do przebiegów poniżej progu, a `initial_cans` i `steps` opisują przebieg,
+- `path_per_can`, `cans_min` i `cans_max` to metryki z `MILESTONES.md`, rozdział 4.
+
+Pozostają puste: `beta`, bo wybór kierunku nie ma heurystyki η (punkt 4), oraz `J`, bo wagi w₁, w₂ wariantu C nie są ustalone. `rho`, `alpha` i `eps` wypełniamy tylko dla N1, bo pozostałe warianty z nich nie korzystają. N2 ma w `algorithm` wartość `aco`, tak jak w `--algorithm aco --reward individual`, choć nie używa feromonu.
+
+## 12. Porównania P1 i P2
+
+Pomiar z 6 listopada 2026: `python -m kaucjowicze.experiments --seeds 30`, wartości domyślne, ziarna 0–29, mapa testowa. Średnia ± 95%.
+
+| Wariant | t₅₀ | t₉₀ | Trasa na puszkę | Kursy | Gini | Min / max puszek na agenta | Osiągnęło 90% | Pełna zbiórka |
+|---|---|---|---|---|---|---|---|---|
+| losowy spacer | 474 ± 83 | 1657 ± 224 | 196.8 ± 16.4 | 45 ± 2 | 0.373 ± 0.018 | 0.7 / 31.5 | 28/30 | 22/30 |
+| ACO N1 | 308 ± 42 | 790 ± 109 | 110.2 ± 16.7 | 46 ± 1 | 0.398 ± 0.031 | 0.7 / 36.6 | 30/30 | 29/30 |
+| N2 | 326 ± 44 | 816 ± 112 | 132.7 ± 14.4 | 47 ± 2 | 0.555 ± 0.022 | 0.2 / 48.4 | 30/30 | 28/30 |
+
+| Porównanie | p dla t₉₀ | p dla Giniego |
+|---|---|---|
+| ACO N1 / losowy spacer | 7.8 · 10⁻⁹ | 0.26 |
+| ACO N1 / N2 | 0.70 | 6.0 · 10⁻⁹ |
+| N2 / losowy spacer | 8.1 · 10⁻⁹ | 5.5 · 10⁻¹¹ |
+
+Średnie t₅₀ i t₉₀, trasa na puszkę, Gini, min / max i liczby przebiegów zgadzają się z pomiarami kontrolnymi z punktów 7 i 10 (z dokładnością do ich zaokrągleń), co potwierdza, że nowy kod mierzy to samo.
+
+**Wnioski:**
+
+- **P1: ACO jest szybsze od losowego spaceru.** t₉₀ jest około dwa razy krótsze, a różnica istotna. Nierówność podziału nie różni się istotnie (p = 0.26).
+- **P2: nie ma dowodu, że N1 jest szybsze od N2** (p = 0.70). Hipoteza o wolniejszym N2 z `MILESTONES.md` nie znajduje potwierdzenia w tym pomiarze. Brak istotnej różnicy nie oznacza, że warianty są równe: 30 ziaren może nie wystarczyć, by wykryć małą różnicę.
+- **P2: N2 dzieli puszki wyraźnie mniej równo** (Gini 0.555 wobec 0.398, różnica istotna). Ta hipoteza się potwierdza.
+- Sześć wykonanych testów nie zmienia tych wniosków: po korekcie Bonferroniego (próg 0.05 / 6 ≈ 0.0083) wyniki po obu stronach progu pozostają te same.
+- Trasa na puszkę jest w N1 średnio krótsza niż w N2 (110.2 ± 16.7 wobec 132.7 ± 14.4), ale przedziały się nakładają, a tej metryki nie testowaliśmy, więc to tylko wskazówka.
