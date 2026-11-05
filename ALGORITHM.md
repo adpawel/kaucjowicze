@@ -63,14 +63,14 @@ Przy ρ = 0.02 okres połowicznego zaniku to ln 2 / −ln(1 − ρ) ≈ 34 kroki
 
 Agent w stanie `SEARCHING`, który nie widzi puszki, wybiera ruch tak (dla komórki c i jej wolnych sąsiadów n):
 
-1. Z prawdopodobieństwem ε: jednostajnie losowy sąsiad.
-2. W przeciwnym razie liczymy ślad prowadzący od bazy:
+1. Liczymy ślad prowadzący od bazy:
    ```
    τ_out(n) = τ(n)   jeśli d(n) > d(c)
    τ_out(n) = 0      w przeciwnym razie
    ```
-3. Jeśli max τ_out(n) ≤ τ₀: ruch jak w losowym spacerze (punkt 5).
-4. W przeciwnym razie sąsiad n z prawdopodobieństwem:
+2. Jeśli max τ_out(n) ≤ τ₀: ruch jak w losowym spacerze (punkt 5). ε nie ma tu zastosowania.
+3. W przeciwnym razie z prawdopodobieństwem ε: jednostajnie losowy sąsiad.
+4. W pozostałych przypadkach sąsiad n z prawdopodobieństwem:
    ```
    P(n) ∝ (τ_out(n) + τ₀)^α
    ```
@@ -93,13 +93,15 @@ Dla jednej komórki ze śladem wśród 8 sąsiadów, przy α = 1 i τ₀ = 0.01,
 |---|---|---|---|---|
 | Udział | 22% | 61% | 94% | 99% |
 
-Słaby ślad tylko sugeruje kierunek, a mocny praktycznie go wyznacza. Próg z kroku 3 tworzy skok: tuż poniżej τ₀ agent ignoruje ślad, tuż powyżej ma na niego około 22% szans.
+Słaby ślad tylko sugeruje kierunek, a mocny praktycznie go wyznacza. Próg z kroku 2 tworzy skok: tuż poniżej τ₀ agent ignoruje ślad, tuż powyżej ma na niego około 22% szans.
 
 ## 5. Eksploracja bez śladu
 
 Odejście od dosłownego wzoru: przy braku śladu `MILESTONES.md` dawałby równe wagi τ₀, czyli ruch bez pamięci kierunku. Zamiast tego agent porusza się **tak samo jak w losowym spacerze**: z prawdopodobieństwem p utrzymuje kierunek, jeśli komórka przed nim jest wolna, a inaczej losuje sąsiada jednostajnie.
 
 **Uzasadnienie:** ACO i punkt odniesienia mają się różnić tylko korzystaniem ze śladów. Gdyby ACO eksplorowało gorzej od losowego spaceru, porównanie P1 mierzyłoby też różnicę w eksploracji.
+
+Dlatego brak śladu sprawdzamy **przed** losowaniem ε. ε oznacza tu odejście od śladu, więc bez śladu nie ma od czego odchodzić. Gdyby ε działało także bez śladu, przy p = 0.5, ε = 0.1 i 8 wolnych sąsiadach szansa utrzymania kierunku spadłaby z 0.5 + 0.5/8 = 56,25% do 0.9 · 56,25% + 0.1/8 = 51,875%, czyli eksploracja różniłaby się od punktu odniesienia. Pierwsza wersja kodu miała ten błąd. Wyniki w punkcie 7 pochodzą już z wersji poprawionej.
 
 Ruch ε pozostaje jednostajny, bez utrzymywania kierunku. Agent idący śladem i tak ma kierunek zgodny ze śladem, więc utrzymywanie go osłabiłoby wychodzenie ze ścieżki.
 
@@ -114,13 +116,27 @@ Pomiar z 5 listopada 2026 na mapie testowej: wartości domyślne oprócz wskazan
 | Wariant | t₅₀ | t₉₀ (± 95%) | Trasa na puszkę | Lepsze t₉₀ niż losowy spacer |
 |---|---|---|---|---|
 | losowy spacer | 474 | 1657 ± 214 | 197 | — |
-| **ACO (domyślne)** | **343** | **990 ± 165** | **127** | **25/30** |
-| ACO, q = 0.1 | 341 | 1049 ± 153 | 145 | 26/30 |
-| ACO, q = 0.3 | 318 | 991 ± 151 | 124 | 25/30 |
-| ACO, q = 3 | 329 | 984 ± 184 | 121 | 28/30 |
-| ACO, ε = 0.3 | 378 | 1192 ± 211 | 160 | 24/30 |
-| ACO, ρ = 0.005 | 316 | 1127 ± 229 | 138 | 25/30 |
-| ACO, ρ = 0.01 | 308 | 1016 ± 168 | 129 | 25/30 |
-| ACO, ρ = 0.05 | 314 | 1003 ± 193 | 142 | 27/30 |
+| **ACO (domyślne)** | **307** | **822 ± 179** | **109** | **28/30** |
+| ACO, q = 0.1 | 296 | 804 ± 126 | 116 | 28/30 |
+| ACO, q = 0.3 | 295 | 717 ± 113 | 121 | 28/30 |
+| ACO, q = 3 | 302 | 913 ± 191 | 122 | 27/30 |
+| ACO, ε = 0.3 | 303 | 848 ± 132 | 123 | 28/30 |
+| ACO, ρ = 0.005 | 313 | 1011 ± 239 | 128 | 25/30 |
+| ACO, ρ = 0.01 | 309 | 885 ± 151 | 125 | 26/30 |
+| ACO, ρ = 0.05 | 293 | 901 ± 159 | 125 | 26/30 |
 
-Przebieg, który nie osiągnął 90% puszek, liczymy jako t₉₀ = T. Może to tylko zaniżyć t₉₀ wariantu, który nie zdążył, więc porównanie nie jest przez to przechylone na korzyść ACO. Przedziały ufności wariantów ACO się nakładają, więc te dane nie pozwalają wybierać między nimi, a jedynie pokazują małą wrażliwość na q. Nie wykonano testu istotności.
+Przebieg, który nie osiągnął 90% puszek, liczymy jako t₉₀ = T. Dotyczy to 2 ziaren losowego spaceru i 1 ziarna ACO. Przedziały ufności wariantów ACO się nakładają, więc te dane nie pozwalają wybierać między nimi. Nie wykonano testu istotności.
+
+Wszystkie puszki zebrano na 22/30 ziaren w losowym spacerze i na 28/30 w ACO z wartościami domyślnymi.
+
+**Mapy, na których ACO wypadło gorzej.** Na ziarnach 5 i 9 t₉₀ było gorsze niż w losowym spacerze, a na ziarnach 0 i 9 ACO nie zebrało wszystkich puszek. Na każdej z tych map puściliśmy po 20 nowych przebiegów każdego algorytmu (ta sama mapa, inne losowanie ruchów):
+
+| Ziarno | t₉₀ losowy | t₉₀ ACO | Lepsze t₉₀ ACO | Pełna zbiórka: losowy | Pełna zbiórka: ACO |
+|---|---|---|---|---|---|
+| 0 | 1581 ± 218 | 841 ± 73 | 20/20 | 13/20 | 20/20 |
+| 5 | 1668 ± 178 | 1152 ± 276 | 16/20 | 4/20 | 19/20 |
+| 9 | 2171 ± 249 | 1113 ± 247 | 18/20 | 7/20 | 20/20 |
+
+Te wyniki to głównie zmienność między przebiegami, a nie słabość ACO na tych mapach.
+
+**Znane ograniczenie: późne odkrywanie skupisk.** W przebiegu na ziarnie 9 zostało 41 puszek w rogu mapy, czyli niemal całe jedno skupisko. Agenci nie utknęli: spędzili w pobliżu tych puszek tylko 5 z 60 000 kroków agentów, a przez większość czasu byli w zachodniej połowie mapy. Feromon pomaga wracać do znalezionych skupisk, ale nie pomaga znaleźć nowych. Eksploracja bez śladu to nadal błądzenie, więc nieodkryte skupisko może przetrwać do T.

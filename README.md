@@ -53,7 +53,7 @@ Options:
 - `--algorithm random|aco`: movement policy, the random-walk baseline (default) or ACO,
 - `--show-map`: print the map before the run (`#` obstacle, `B` base, digits = number of cans, `+` more than 9, `.` empty).
 
-With `--algorithm aco` an agent walking home leaves a trail on its way, as strong as the number of cans it saw left at the source, so an exhausted source leaves none. Trails evaporate every step. A searching agent follows trails leading away from the base, makes a random move with probability epsilon and explores like the random walk where there is no trail.
+With `--algorithm aco` an agent walking home leaves a trail on its way, as strong as the number of cans it saw left at the source, so an exhausted source leaves none. Trails evaporate every step. A searching agent follows trails leading away from the base, making a random move instead with probability epsilon. Where there is no trail it explores exactly like the random walk.
 
 Default parameters (number of agents, bag capacity, vision radius, pheromone, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
 

@@ -123,6 +123,16 @@ def test_without_trail_agent_explores_like_the_random_walk():
         assert agent.pos == (expected_x, 5)
 
 
+def test_exploration_rate_does_not_change_the_walk_without_a_trail():
+    grid = _open_grid()
+    policy, _ = _policy(grid, direction_persistence=1.0, exploration_rate=1.0)
+    agent = Agent(id=0, pos=(2, 5), heading=(1, 0))
+    rng = np.random.default_rng(0)
+    for expected_x in range(3, 8):
+        agent.pos = policy.choose_move(agent, grid, rng)
+        assert agent.pos == (expected_x, 5)
+
+
 def test_trail_fainter_than_base_level_is_ignored():
     grid = _open_grid()
     policy, pheromone = _policy(grid, direction_persistence=1.0, pheromone_base=0.01)

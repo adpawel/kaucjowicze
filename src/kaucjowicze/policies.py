@@ -46,7 +46,8 @@ class AcoPolicy:
     A neighbour is chosen with probability proportional to (tau + tau0) ** alpha. Only trail on
     cells farther from the base counts: trails are laid on the way home, so walking them away
     from the base leads to the cans. With no such trail in reach the agent explores exactly
-    like the random walk, which keeps the comparison with the baseline fair.
+    like the random walk, which keeps the comparison with the baseline fair, so epsilon only
+    applies where there is a trail to leave.
     """
 
     def __init__(
@@ -63,12 +64,12 @@ class AcoPolicy:
         options = free_neighbours(grid, agent.pos)
         if not options:
             return agent.pos
-        if rng.random() < self.epsilon:
-            return options[int(rng.integers(len(options)))]
 
         trail = self._outward_trail(agent.pos, options)
         if trail.max() <= self.tau0:
             return self._explorer.choose_move(agent, grid, rng)
+        if rng.random() < self.epsilon:
+            return options[int(rng.integers(len(options)))]
         weights = (trail + self.tau0) ** self.alpha
         return options[int(rng.choice(len(options), p=weights / weights.sum()))]
 
