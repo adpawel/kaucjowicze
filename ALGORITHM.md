@@ -75,6 +75,8 @@ Agent w stanie `SEARCHING`, który nie widzi puszki, wybiera ruch tak (dla komó
    P(n) ∝ (τ_out(n) + τ₀)^α
    ```
 
+W kodzie podstawy dzielimy przed potęgowaniem przez największą z nich: b(n) = τ_out(n) + τ₀, a waga to (b(n) / max b)^α. Prawdopodobieństwa są te same, bo wspólny czynnik się skraca, ale największa waga wynosi zawsze 1. Bez tego przy dużym α (np. α = 300, τ₀ = 0.01, τ = 0.02) wszystkie wagi spadają do zera w arytmetyce zmiennoprzecinkowej, a przy dużym τ rosną do nieskończoności. W obu przypadkach normalizacja daje NaN.
+
 **Odejście od `PLAN.md`:** rozdział 3.4 podaje wzór τ^α · η^β. Korzystamy z prostszego wzoru z `MILESTONES.md`, bez heurystyki η i parametru β.
 
 ### „Preferuje ruch od bazy”

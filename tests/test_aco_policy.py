@@ -96,6 +96,14 @@ def test_alpha_sharpens_the_choice():
     assert shares[OUTWARD_A] == pytest.approx(0.9, abs=0.04)
 
 
+@pytest.mark.parametrize("strength", [0.02, 1000.0])
+def test_extreme_alpha_keeps_probabilities_valid(strength):
+    grid = _open_grid()
+    policy, pheromone = _policy(grid, pheromone_alpha=300.0, pheromone_base=0.01)
+    pheromone[OUTWARD_A[1], OUTWARD_A[0]] = strength
+    assert _move_shares(policy, grid, Agent(id=0, pos=START)) == {OUTWARD_A: 1.0}
+
+
 def test_base_level_lets_agent_leave_a_weak_trail():
     grid = _open_grid()
     policy, pheromone = _policy(grid, pheromone_base=0.1)

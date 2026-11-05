@@ -70,7 +70,9 @@ class AcoPolicy:
             return self._explorer.choose_move(agent, grid, rng)
         if rng.random() < self.epsilon:
             return options[int(rng.integers(len(options)))]
-        weights = (trail + self.tau0) ** self.alpha
+        bases = trail + self.tau0
+        # Scaling keeps the probabilities and stops a large alpha from under- or overflowing
+        weights = (bases / bases.max()) ** self.alpha
         return options[int(rng.choice(len(options), p=weights / weights.sum()))]
 
     def _outward_trail(self, pos: Position, options: list[Position]) -> np.ndarray:
