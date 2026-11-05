@@ -9,15 +9,15 @@ from kaucjowicze.config import SimulationConfig  # noqa: E402
 from kaucjowicze.grid import Grid  # noqa: E402
 from kaucjowicze.policies import RandomWalkPolicy  # noqa: E402
 from kaucjowicze.simulation import Simulation  # noqa: E402
-from kaucjowicze.view import Playback, agent_color  # noqa: E402
+from kaucjowicze.view import SPEEDS, Playback, agent_color, hud_lines  # noqa: E402
 
 
-def _make_sim(max_steps: int = 3000) -> Simulation:
-    grid = Grid(20, 10)
+def _make_sim(max_steps: int = 3000, width: int = 20, height: int = 10) -> Simulation:
+    grid = Grid(width, height)
     grid.add_obstacle(5, 2, 3, 3)
     grid.add_base((10, 5))
     grid.add_can((12, 5), 8)
-    config = SimulationConfig(width=20, height=10, n_agents=2, max_steps=max_steps, seed=0)
+    config = SimulationConfig(width=width, height=height, n_agents=2, max_steps=max_steps, seed=0)
     policy = RandomWalkPolicy(config.direction_persistence)
     return Simulation(config, grid, policy, np.random.default_rng(0))
 
@@ -95,10 +95,59 @@ def test_action_keys():
     assert gui.apply_key(pygame.K_a, playback) is gui.Action.NONE
 
 
-def test_window_size_fits_map_and_hud():
-    width, height = gui.window_size(_make_sim().grid, cell_size=10)
-    assert width == 200
+def test_window_is_as_wide_as_a_large_map(window):
+    _, font = window
+    sim = _make_sim(width=150, height=10)
+    width, height = gui.window_size(sim, "random", 0, font, cell_size=10)
+    assert width == 1500
     assert height == 100 + gui.HUD_HEIGHT
+
+
+def test_window_is_widened_on_a_small_map(window):
+    _, font = window
+    sim = _make_sim()
+    width, height = gui.window_size(sim, "random", 0, font, cell_size=10)
+    assert width > 200
+    assert height == 100 + gui.HUD_HEIGHT
+
+
+@pytest.mark.parametrize("variant", ["random", "a much longer name of a variant"])
+def test_status_bar_text_fits_in_the_window_for_the_whole_run(window, variant):
+    _, font = window
+    seed = 2147483647
+    sim = _make_sim(max_steps=3000)
+    width, _ = gui.window_size(sim, variant, seed, font)
+    playback = Playback(paused=True)
+    for _ in SPEEDS:
+        playback.faster()
+
+    def assert_fits() -> None:
+        for line in hud_lines(sim, variant, seed, playback):
+            assert font.size(line)[0] + 2 * gui.HUD_PADDING <= width
+
+    assert_fits()
+    sim.agents[0].state = AgentState.CARRYING
+    sim.collected = sim.initial_cans
+    sim.step_count = sim.config.max_steps
+    assert_fits()
+
+
+def test_window_size_does_not_change_the_simulation(window):
+    _, font = window
+    sim = _make_sim()
+    gui.window_size(sim, "random", 0, font)
+    assert sim.step_count == 0
+    assert sim.collected == 0
+    assert all(agent.state is AgentState.SEARCHING for agent in sim.agents)
+
+
+def test_small_map_does_not_leave_old_pixels_next_to_the_map(window):
+    _, font = window
+    sim = _make_sim()
+    screen = pygame.display.set_mode(gui.window_size(sim, "random", 0, font))
+    screen.fill((1, 2, 3))
+    gui.draw(screen, font, sim, Playback(), "random", 0)
+    assert screen.get_at((screen.get_width() - 1, 0))[:3] == gui.WINDOW_COLOR
 
 
 def test_draw_only_reads_the_simulation(window):

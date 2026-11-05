@@ -5,15 +5,14 @@ from enum import Enum, auto
 
 import pygame
 
-from kaucjowicze.grid import Grid
 from kaucjowicze.simulation import Simulation
 from kaucjowicze.view import (
-    BACKGROUND_COLOR,
     BASE_COLOR,
     Playback,
     agent_color,
     compose_map_image,
     hud_lines,
+    longest_hud_lines,
 )
 
 CELL_SIZE = 10  # pixels per grid cell
@@ -22,6 +21,7 @@ HUD_LINE_HEIGHT = 20
 HUD_PADDING = 4
 FONT_SIZE = 22
 HUD_TEXT_COLOR = (30, 30, 30)
+WINDOW_COLOR = (225, 225, 225)  # status bar and the area next to a narrow map
 FPS = 60
 MAX_FRAME_TIME = 0.25  # seconds; a stalled frame (e.g. a dragged window) must not cause a jump
 
@@ -52,8 +52,17 @@ def apply_key(key: int, playback: Playback) -> Action:
     return Action.NONE
 
 
-def window_size(grid: Grid, cell_size: int = CELL_SIZE) -> tuple[int, int]:
-    return grid.width * cell_size, grid.height * cell_size + HUD_HEIGHT
+def window_size(
+    sim: Simulation,
+    variant: str,
+    seed: int,
+    font: pygame.font.Font,
+    cell_size: int = CELL_SIZE,
+) -> tuple[int, int]:
+    """Room for the map and for the status bar text, also on a map narrower than the text."""
+    text_width = max(font.size(line)[0] for line in longest_hud_lines(sim, variant, seed))
+    width = max(sim.grid.width * cell_size, text_width + 2 * HUD_PADDING)
+    return width, sim.grid.height * cell_size + HUD_HEIGHT
 
 
 def draw(
@@ -71,7 +80,7 @@ def draw(
     # surfarray indexes pixels as [x, y], the grid as [y, x]
     surface = pygame.surfarray.make_surface(image.swapaxes(0, 1))
 
-    screen.fill(BACKGROUND_COLOR)
+    screen.fill(WINDOW_COLOR)
     screen.blit(pygame.transform.scale(surface, map_size), (0, 0))
 
     # A single cell is easy to miss, so the base gets a frame around it
@@ -107,9 +116,9 @@ def run_gui(
 
     pygame.init()
     try:
-        screen = pygame.display.set_mode(window_size(sim.grid, cell_size))
-        pygame.display.set_caption(f"Kaucjowicze: {variant}")
         font = pygame.font.Font(None, FONT_SIZE)
+        screen = pygame.display.set_mode(window_size(sim, variant, seed, font, cell_size))
+        pygame.display.set_caption(f"Kaucjowicze: {variant}")
         clock = pygame.time.Clock()
 
         while True:

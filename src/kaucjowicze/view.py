@@ -105,6 +105,25 @@ class Playback:
         return steps
 
 
+def _format_hud(
+    variant: str,
+    seed: int,
+    progress: str,
+    agents: str,
+    speed: int,
+    pheromone: str,
+    flag: str | None,
+) -> list[str]:
+    status = f"speed {speed} steps/s | pheromone {pheromone}"
+    if flag is not None:
+        status += f" | {flag}"
+    return [
+        f"{variant} | seed {seed} | {progress} | {agents}",
+        status,
+        "space: pause | +/-: speed | R: restart | P: pheromone | Esc: quit",
+    ]
+
+
 def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> list[str]:
     """Text of the status bar, one string per line."""
     carrying = sum(agent.state is AgentState.CARRYING for agent in sim.agents)
@@ -115,16 +134,33 @@ def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> l
     else:
         pheromone = "on" if playback.show_pheromone else "off"
 
-    status = f"speed {playback.speed} steps/s | pheromone {pheromone}"
+    flag = None
     if sim.is_finished:
-        status += " | FINISHED"
+        flag = "FINISHED"
     elif playback.paused:
-        status += " | PAUSED"
+        flag = "PAUSED"
 
-    return [
-        f"{variant} | seed {seed} | step {sim.step_count}/{sim.config.max_steps} "
-        f"| cans {sim.collected}/{sim.initial_cans} "
-        f"| searching {searching} | carrying {carrying}",
-        status,
-        "space: pause | +/-: speed | R: restart | P: pheromone | Esc: quit",
-    ]
+    return _format_hud(
+        variant,
+        seed,
+        f"step {sim.step_count}/{sim.config.max_steps} | cans {sim.collected}/{sim.initial_cans}",
+        f"searching {searching} | carrying {carrying}",
+        playback.speed,
+        pheromone,
+        flag,
+    )
+
+
+def longest_hud_lines(sim: Simulation, variant: str, seed: int) -> list[str]:
+    """The status bar with the most digits it can reach in this run, to size the window."""
+    n_agents = len(sim.agents)
+    return _format_hud(
+        variant,
+        seed,
+        f"step {sim.config.max_steps}/{sim.config.max_steps} "
+        f"| cans {sim.initial_cans}/{sim.initial_cans}",
+        f"searching {n_agents} | carrying {n_agents}",
+        max(SPEEDS),
+        "n/a",
+        "FINISHED",
+    )
