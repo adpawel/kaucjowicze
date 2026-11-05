@@ -46,7 +46,14 @@ Upgrading pip is required: older versions (e.g. 21.x) cannot install the project
 python -m kaucjowicze --seed 0
 ```
 
-This builds the test map, scatters cans and prints the grid (`#` obstacle, `B` base, digits = number of cans, `.` empty).
+This builds the test map, scatters cans and runs a headless simulation: agents start at the base, search for cans, return when their bag is full (or when they have not seen a new can for a while) and go out again. The run ends when all cans are delivered or after the step limit. A summary is printed at the end (steps, collected cans, trips, path length, cans per agent).
+
+Options:
+
+- `--algorithm random`: movement policy (currently only the random-walk baseline),
+- `--show-map`: print the map before the run (`#` obstacle, `B` base, digits = number of cans, `+` more than 9, `.` empty).
+
+Default parameters (number of agents, bag capacity, vision radius, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
 
 ### 5. Run tests and linters
 

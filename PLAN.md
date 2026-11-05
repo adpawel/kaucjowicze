@@ -75,6 +75,8 @@ Porównujemy trzy podejścia do oceny jakości algorytmu:
 2. Wariant **B** początkowo tylko raportujemy jako metrykę, bez optymalizowania.
 3. Następnie wprowadzamy wariant **C** i ewentualnie mechanizm wpływający na równomierność, np. odpychanie agentów od zatłoczonych klastrów. Porównujemy, jak wybór funkcji celu zmienia zachowanie kolonii.
 
+> Funkcje **nagrody** agentów (wspólna kontra indywidualna), które kształtują ich zachowanie, oraz plan pierwszych porównań opisuje [`MILESTONES.md`](MILESTONES.md). Miary A/B/C powyżej służą do oceny każdego wariantu.
+
 ### 4.3 Protokół eksperymentów
 - ACO i baseline uruchamiamy na tych samych mapach i z tymi samymi ziarnami losowania.
 - Wykonujemy N powtórzeń dla każdej konfiguracji (np. N = 30).
