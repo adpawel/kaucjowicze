@@ -24,6 +24,13 @@ class SimulationConfig:
     return_patience: int = 50  # S: steps without a new can before returning with a partial bag
     direction_persistence: float = 0.5  # random walk: probability of keeping the current heading
 
+    # Pheromone (ACO)
+    trail_deposit: float = 1.0  # q: trail per step = q * cans the agent left at the source
+    evaporation_rate: float = 0.02  # rho: each step tau <- (1 - rho) * tau
+    pheromone_alpha: float = 1.0  # alpha: neighbour weight is (tau + tau0) ** alpha
+    pheromone_base: float = 0.01  # tau0: weight of a cell without a trail
+    exploration_rate: float = 0.1  # epsilon: probability of a random move instead of following
+
     # Time
     max_steps: int = 3000  # T: simulation limit
 
@@ -45,3 +52,13 @@ class SimulationConfig:
             raise ValueError("Max steps must be positive")
         if not 0.0 <= self.direction_persistence <= 1.0:
             raise ValueError("Direction persistence must be in [0, 1]")
+        if self.trail_deposit < 0:
+            raise ValueError("Trail deposit must not be negative")
+        if not 0.0 <= self.evaporation_rate <= 1.0:
+            raise ValueError("Evaporation rate must be in [0, 1]")
+        if self.pheromone_alpha < 0:
+            raise ValueError("Pheromone alpha must not be negative")
+        if self.pheromone_base <= 0:
+            raise ValueError("Pheromone base level must be positive")
+        if not 0.0 <= self.exploration_rate <= 1.0:
+            raise ValueError("Exploration rate must be in [0, 1]")

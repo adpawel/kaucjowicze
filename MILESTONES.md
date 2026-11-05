@@ -1,6 +1,6 @@
 # Kaucjowicze: plan na kolejne zajęcia
 
-Ten dokument rozpisuje, co pokazujemy na najbliższych zajęciach i co zostaje na później. Ogólny model i literatura są w [`PLAN.md`](PLAN.md). Tutaj doprecyzowujemy założenia i funkcje nagrody.
+Ten dokument rozpisuje, co pokazujemy na najbliższych zajęciach i co zostaje na później. Ogólny model i literatura są w [`PLAN.md`](PLAN.md). Tutaj doprecyzowujemy założenia i funkcje nagrody. Wzory i decyzje podjęte przy implementacji zbiera [`ALGORITHM.md`](ALGORITHM.md).
 
 **Stan obecny (`master`):** siatka z przeszkodami, punkt skupu, generator puszek w skupiskach, tymczasowa mapa testowa, podgląd w konsoli, testy i CI.
 **Brakuje:** agentów, ACO, wizualizacji, funkcji nagrody, metryk i porównań.

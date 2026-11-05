@@ -50,10 +50,12 @@ This builds the test map, scatters cans and runs a headless simulation: agents s
 
 Options:
 
-- `--algorithm random`: movement policy (currently only the random-walk baseline),
+- `--algorithm random|aco`: movement policy, the random-walk baseline (default) or ACO,
 - `--show-map`: print the map before the run (`#` obstacle, `B` base, digits = number of cans, `+` more than 9, `.` empty).
 
-Default parameters (number of agents, bag capacity, vision radius, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
+With `--algorithm aco` an agent walking home leaves a trail on its way, as strong as the number of cans it saw left at the source, so an exhausted source leaves none. Trails evaporate every step. A searching agent follows trails leading away from the base, making a random move instead with probability epsilon. Where there is no trail it explores exactly like the random walk.
+
+Default parameters (number of agents, bag capacity, vision radius, pheromone, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
 
 ### Visualization
 
@@ -61,17 +63,17 @@ The window needs Pygame, which is an optional dependency:
 
 ```bash
 pip install -e ".[dev,gui]"
-python -m kaucjowicze --algorithm random --seed 0 --gui
+python -m kaucjowicze --algorithm aco --seed 0 --gui
 ```
 
-The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
+The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows), pheromone (green, ACO only) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
 
 | Key | Action |
 |---|---|
 | Space | pause / resume |
 | `+` / `-` | faster / slower (1 to 500 steps per second) |
 | `R` | restart with the same seed |
-| `P` | show / hide the pheromone heat map (`n/a` until a policy uses pheromone) |
+| `P` | show / hide the pheromone heat map (`n/a` for the random walk) |
 | `Esc` | quit |
 
 ### 5. Run tests and linters

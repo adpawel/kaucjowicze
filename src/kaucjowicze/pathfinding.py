@@ -65,8 +65,18 @@ def step_towards_base(grid: Grid, dist: np.ndarray, pos: Position) -> Position:
     return best
 
 
+def _view_window(grid: Grid, pos: Position, radius: int) -> np.ndarray:
+    x, y = pos
+    return grid.cans[max(y - radius, 0) : y + radius + 1, max(x - radius, 0) : x + radius + 1]
+
+
 def _within(center: Position, pos: Position, radius: int) -> bool:
     return max(abs(pos[0] - center[0]), abs(pos[1] - center[1])) <= radius
+
+
+def visible_cans(grid: Grid, pos: Position, radius: int) -> int:
+    """Number of cans within Chebyshev distance `radius` of `pos`."""
+    return int(_view_window(grid, pos, radius).sum())
 
 
 def first_step_to_nearest_can(grid: Grid, pos: Position, radius: int) -> Position | None:
@@ -79,8 +89,7 @@ def first_step_to_nearest_can(grid: Grid, pos: Position, radius: int) -> Positio
     x, y = pos
     if grid.cans[y, x] > 0:
         return pos
-    window = grid.cans[max(y - radius, 0) : y + radius + 1, max(x - radius, 0) : x + radius + 1]
-    if not window.any():
+    if not _view_window(grid, pos, radius).any():
         return None  # fast path: nothing in sight, skip the search
 
     first_step: dict[Position, Position] = {}

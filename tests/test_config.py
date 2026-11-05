@@ -25,3 +25,29 @@ def test_default_agent_parameters_match_milestones():
 def test_invalid_agent_parameters_rejected(kwargs):
     with pytest.raises(ValueError):
         SimulationConfig(**kwargs)
+
+
+def test_default_pheromone_parameters_match_milestones():
+    config = SimulationConfig()
+    assert config.evaporation_rate == 0.02
+    assert config.pheromone_alpha == 1.0
+    assert config.pheromone_base == 0.01
+    assert config.exploration_rate == 0.1
+    assert config.trail_deposit > 0
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"evaporation_rate": -0.01},
+        {"evaporation_rate": 1.01},
+        {"pheromone_alpha": -1.0},
+        {"pheromone_base": 0.0},
+        {"exploration_rate": -0.1},
+        {"exploration_rate": 1.1},
+        {"trail_deposit": -1.0},
+    ],
+)
+def test_invalid_pheromone_parameters_rejected(kwargs):
+    with pytest.raises(ValueError):
+        SimulationConfig(**kwargs)
