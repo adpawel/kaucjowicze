@@ -5,7 +5,7 @@ from kaucjowicze.pathfinding import (
     NEIGHBOURS,
     distance_map,
     first_step_to_nearest_can,
-    step_towards_base,
+    step_closer,
 )
 
 
@@ -54,7 +54,14 @@ def test_distance_map_with_multiple_bases_uses_nearest():
     np.testing.assert_array_equal(dist[0], [0, 1, 2, 3, 4, 3, 2, 1, 0])
 
 
-def test_step_towards_base_decreases_distance():
+def test_distance_map_from_chosen_sources_ignores_the_bases():
+    grid = Grid(10, 1)
+    grid.add_base((0, 0))
+    dist = distance_map(grid, [(6, 0)])
+    assert dist[0].tolist() == [6, 5, 4, 3, 2, 1, 0, 1, 2, 3]
+
+
+def test_step_closer_decreases_distance():
     grid = Grid(10, 10)
     grid.add_obstacle(3, 0, 1, 8)
     grid.add_base((0, 0))
@@ -62,7 +69,7 @@ def test_step_towards_base_decreases_distance():
     pos = (6, 0)
     steps = 0
     while pos != (0, 0):
-        nxt = step_towards_base(grid, dist, pos)
+        nxt = step_closer(grid, dist, pos)
         assert grid.is_free(nxt)
         assert dist[nxt[1], nxt[0]] == dist[pos[1], pos[0]] - 1
         pos = nxt

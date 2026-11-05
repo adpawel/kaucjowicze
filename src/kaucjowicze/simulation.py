@@ -12,7 +12,7 @@ from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
     distance_map,
     first_step_to_nearest_can,
-    step_towards_base,
+    step_closer,
     visible_cans,
 )
 from kaucjowicze.policies import MovementPolicy
@@ -91,7 +91,7 @@ class Simulation:
     def _carry(self, agent: Agent) -> None:
         if not self.grid.is_base(agent.pos):
             self._lay_trail(agent)
-            self._move(agent, step_towards_base(self.grid, self.distance, agent.pos))
+            self._move(agent, step_closer(self.grid, self.distance, agent.pos))
         if self.grid.is_base(agent.pos):
             self._deposit(agent)
 
