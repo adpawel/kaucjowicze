@@ -154,3 +154,14 @@ def test_pheromone_with_wrong_shape_is_rejected():
     policy = RandomWalkPolicy(config.direction_persistence)
     with pytest.raises(ValueError, match="shape"):
         Simulation(config, grid, policy, np.random.default_rng(0), pheromone=np.zeros((5, 4)))
+
+
+def test_integer_pheromone_is_rejected():
+    grid = Grid(5, 4)
+    grid.add_base((0, 0))
+    config = SimulationConfig(n_agents=1)
+    policy = RandomWalkPolicy(config.direction_persistence)
+    with pytest.raises(ValueError, match="floating"):
+        Simulation(
+            config, grid, policy, np.random.default_rng(0), pheromone=np.zeros_like(grid.cans)
+        )

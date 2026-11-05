@@ -32,6 +32,8 @@ class Simulation:
             raise ValueError("Grid must have at least one base")
         if pheromone is not None and pheromone.shape != (grid.height, grid.width):
             raise ValueError(f"Pheromone shape {pheromone.shape} does not match the grid")
+        if pheromone is not None and not np.issubdtype(pheromone.dtype, np.floating):
+            raise ValueError(f"Pheromone must be a floating-point array, got {pheromone.dtype}")
         self.config = config
         self.grid = grid
         self.policy = policy
