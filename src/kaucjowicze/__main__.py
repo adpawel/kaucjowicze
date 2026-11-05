@@ -8,16 +8,11 @@ import numpy as np
 from kaucjowicze.cans import scatter_cans
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.maps import build_test_map
-from kaucjowicze.policies import MovementPolicy, RandomWalkPolicy
+from kaucjowicze.pathfinding import distance_map
+from kaucjowicze.policies import AcoPolicy, RandomWalkPolicy
 from kaucjowicze.simulation import Simulation
 
-ALGORITHMS = ("random",)
-
-
-def build_policy(algorithm: str, config: SimulationConfig) -> MovementPolicy:
-    if algorithm == "random":
-        return RandomWalkPolicy(config.direction_persistence)
-    raise ValueError(f"Unknown algorithm: {algorithm}")
+ALGORITHMS = ("random", "aco")
 
 
 def build_simulation(algorithm: str, seed: int | None) -> Simulation:
@@ -26,7 +21,13 @@ def build_simulation(algorithm: str, seed: int | None) -> Simulation:
     rng = np.random.default_rng(config.seed)
     grid = build_test_map(config)
     scatter_cans(grid, config, rng)
-    return Simulation(config, grid, build_policy(algorithm, config), rng)
+    if algorithm == "random":
+        return Simulation(config, grid, RandomWalkPolicy(config.direction_persistence), rng)
+    if algorithm == "aco":
+        pheromone = np.zeros((grid.height, grid.width))
+        policy = AcoPolicy(config, pheromone, distance_map(grid))
+        return Simulation(config, grid, policy, rng, pheromone=pheromone)
+    raise ValueError(f"Unknown algorithm: {algorithm}")
 
 
 def _load_run_gui(parser: argparse.ArgumentParser) -> Callable[..., None]:

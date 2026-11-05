@@ -85,3 +85,29 @@ def test_headless_run_does_not_import_pygame():
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "Collected" in result.stdout
+
+
+def test_only_aco_simulation_has_a_pheromone_field():
+    assert build_simulation("random", seed=0).pheromone is None
+    sim = build_simulation("aco", seed=0)
+    assert sim.pheromone.shape == (sim.grid.height, sim.grid.width)
+    assert sim.pheromone.sum() == 0.0
+
+
+def test_aco_runs_from_command_line(capsys):
+    main(["--algorithm", "aco", "--seed", "0"])
+    output = capsys.readouterr().out
+    assert "Algorithm: aco" in output
+    assert "Collected" in output
+
+
+def test_aco_restart_reproduces_the_run(monkeypatch):
+    calls = _fake_gui(monkeypatch)
+    main(["--algorithm", "aco", "--seed", "5", "--gui"])
+    make_sim = calls[0]["make_sim"]
+    a, b = make_sim(), make_sim()
+    for _ in range(200):
+        a.step()
+        b.step()
+    assert [agent.pos for agent in a.agents] == [agent.pos for agent in b.agents]
+    assert (a.pheromone == b.pheromone).all()
