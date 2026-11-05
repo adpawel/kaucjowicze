@@ -1,7 +1,7 @@
 """Headless simulation loop: agents search for cans, fill their bags and bring them to a base.
 
-The simulation holds no rendering state; a visualization only reads `grid`, `agents`
-and `step_count`.
+The simulation holds no rendering state; a visualization only reads `grid`, `agents`,
+`pheromone` and `step_count`.
 """
 
 import numpy as np
@@ -34,6 +34,7 @@ class Simulation:
         self.initial_cans = grid.total_cans
         self.collected = 0
         self.step_count = 0
+        self.pheromone: np.ndarray | None = None  # [y, x]; None when the policy uses no trails
 
     @property
     def is_finished(self) -> bool:

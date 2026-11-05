@@ -25,6 +25,10 @@ def test_agents_start_at_base():
     assert sim.collected == 0
 
 
+def test_simulation_without_aco_has_no_pheromone():
+    assert _test_map_sim(seed=0).pheromone is None
+
+
 def test_agents_never_leave_free_cells():
     sim = _test_map_sim(seed=1, max_steps=500)
     for _ in range(500):

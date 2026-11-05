@@ -55,6 +55,25 @@ Options:
 
 Default parameters (number of agents, bag capacity, vision radius, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
 
+### Visualization
+
+The window needs Pygame, which is an optional dependency:
+
+```bash
+pip install -e ".[dev,gui]"
+python -m kaucjowicze --algorithm random --seed 0 --gui
+```
+
+The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
+
+| Key | Action |
+|---|---|
+| Space | pause / resume |
+| `+` / `-` | faster / slower (1 to 500 steps per second) |
+| `R` | restart with the same seed |
+| `P` | show / hide the pheromone heat map (`n/a` until a policy uses pheromone) |
+| `Esc` | quit |
+
 ### 5. Run tests and linters
 
 ```bash
