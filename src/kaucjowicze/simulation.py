@@ -86,7 +86,7 @@ class Simulation:
         if agent.bag > 0 and agent.steps_without_can >= self.config.return_patience:
             agent.state = AgentState.CARRYING
             return
-        self._move(agent, self.policy.choose_move(agent, self.grid, self.rng))
+        self._move(agent, self.policy.choose_move(agent, self.grid, self.rng, self.agents))
 
     def _carry(self, agent: Agent) -> None:
         if not self.grid.is_base(agent.pos):

@@ -30,6 +30,8 @@ class SimulationConfig:
     pheromone_alpha: float = 1.0  # alpha: neighbour weight is (tau + tau0) ** alpha
     pheromone_base: float = 0.01  # tau0: weight of a cell without a trail
     exploration_rate: float = 0.1  # epsilon: probability of a random move instead of following
+    crowd_radius: int = 3  # half-width of the window an agent checks for a crowd ahead of a move
+    crowd_penalty: float = 0.0  # trail ahead of a crowd counts this much; 1 turns avoidance off
 
     # Time
     max_steps: int = 3000  # T: simulation limit
@@ -62,3 +64,7 @@ class SimulationConfig:
             raise ValueError("Pheromone base level must be positive")
         if not 0.0 <= self.exploration_rate <= 1.0:
             raise ValueError("Exploration rate must be in [0, 1]")
+        if self.crowd_radius < 0:
+            raise ValueError("Crowd radius must not be negative")
+        if not 0.0 <= self.crowd_penalty <= 1.0:
+            raise ValueError("Crowd penalty must be in [0, 1]")
