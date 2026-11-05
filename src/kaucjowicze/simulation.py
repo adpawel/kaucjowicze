@@ -14,6 +14,7 @@ from kaucjowicze.pathfinding import (
     first_step_to_nearest_can,
     step_closer,
     visible_cans,
+    within_radius,
 )
 from kaucjowicze.policies import MovementPolicy
 
@@ -74,6 +75,7 @@ class Simulation:
             agent.bag += 1
             agent.steps_without_can = 0
             agent.source_cans = visible_cans(self.grid, agent.pos, self.config.vision_radius)
+            self._remember_source(agent)
             if agent.bag >= self.config.bag_capacity:
                 agent.state = AgentState.CARRYING
             return
@@ -87,6 +89,18 @@ class Simulation:
             agent.state = AgentState.CARRYING
             return
         self._move(agent, self.policy.choose_move(agent, self.grid, self.rng, self.agents))
+
+    def _remember_source(self, agent: Agent) -> None:
+        """Keep the richest source seen; what is seen at the remembered place replaces its count."""
+        seen = agent.source_cans
+        known = agent.remembered_source
+        if (
+            known is None
+            or seen >= agent.remembered_cans
+            or within_radius(known, agent.pos, self.config.vision_radius)
+        ):
+            agent.remembered_source = agent.pos if seen > 0 else None
+            agent.remembered_cans = seen
 
     def _carry(self, agent: Agent) -> None:
         if not self.grid.is_base(agent.pos):

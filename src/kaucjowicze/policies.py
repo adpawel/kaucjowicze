@@ -13,7 +13,9 @@ from kaucjowicze.agent import Agent, AgentState
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
+    distance_map,
     free_neighbours,
+    step_closer,
     visible_cans,
     within_radius,
 )
@@ -58,6 +60,38 @@ class RandomWalkPolicy:
         if not options:
             return agent.pos
         return options[int(rng.integers(len(options)))]
+
+
+class IndividualPolicy:
+    """Individual reward (N2): return to the privately remembered source, ignoring the others.
+
+    The simulation updates the memory at every pick-up. An agent only gets here when it sees no
+    can, so reaching the remembered place means the source is gone. With nothing remembered the
+    agent explores like the random walk.
+    """
+
+    def __init__(self, config: SimulationConfig) -> None:
+        self._explorer = RandomWalkPolicy(config.direction_persistence)
+        self._routes: dict[Position, np.ndarray] = {}  # distance maps of visited sources
+
+    def choose_move(
+        self,
+        agent: Agent,
+        grid: Grid,
+        rng: np.random.Generator,
+        agents: Sequence[Agent] = (),
+    ) -> Position:
+        if agent.remembered_source == agent.pos:
+            agent.remembered_source = None
+            agent.remembered_cans = 0
+        if agent.remembered_source is None:
+            return self._explorer.choose_move(agent, grid, rng)
+        return step_closer(grid, self._route_to(grid, agent.remembered_source), agent.pos)
+
+    def _route_to(self, grid: Grid, source: Position) -> np.ndarray:
+        if source not in self._routes:
+            self._routes[source] = distance_map(grid, [source])
+        return self._routes[source]
 
 
 class AcoPolicy:
