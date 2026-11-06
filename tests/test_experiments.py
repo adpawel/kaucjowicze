@@ -127,6 +127,22 @@ def test_only_trail_following_variant_reports_pheromone_parameters(tables):
         assert (row["rho"], row["alpha"], row["eps"]) == (None, None, None)
 
 
+def test_aco_without_a_reward_is_recorded_as_the_shared_reward_it_runs():
+    labels = []
+    implicit = run_experiment(
+        seeds=[0],
+        config=SMALL,
+        variants=(("aco", None),),
+        progress=lambda done, total, label: labels.append(label),
+    )
+    explicit = run_experiment(seeds=[0], config=SMALL, variants=(("aco", "shared"),))
+
+    assert implicit == explicit
+    assert implicit.runs[0]["reward"] == "shared"
+    assert implicit.runs[0]["rho"] == SMALL.evaporation_rate
+    assert labels == ["aco/shared, seed 0"]
+
+
 def test_columns_without_a_definition_yet_stay_empty(tables):
     assert all(row["beta"] is None and row["J"] is None for row in tables.runs)
 

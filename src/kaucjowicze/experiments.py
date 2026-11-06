@@ -114,6 +114,8 @@ def run_experiment(
     """Run each variant on each seed. `progress` gets (runs done, all runs, finished run)."""
     config = config or SimulationConfig()
     seeds = list(seeds)
+    # ACO without a reward runs the shared one, so that is what the results have to say
+    variants = [(a, SHARED if a == "aco" and r is None else r) for a, r in variants]
     total = len(seeds) * len(variants)
     tables = ExperimentTables([], [], [])
     for run_id, (seed, variant) in enumerate((s, v) for s in seeds for v in variants):
