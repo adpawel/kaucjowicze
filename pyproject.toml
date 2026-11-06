@@ -20,6 +20,11 @@ dev = [
 gui = [
     "pygame>=2.6",
 ]
+analysis = [
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+    "scipy>=1.11",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

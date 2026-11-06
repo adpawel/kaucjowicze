@@ -84,6 +84,25 @@ The map shows obstacles (gray), the base (black, framed), cans (yellow to dark r
 | `P` | show / hide the pheromone heat map (`n/a` for the random walk and the individual reward) |
 | `Esc` | quit |
 
+### Experiments
+
+Run every variant (random walk, ACO with the shared reward, agents with the individual reward) on the same seeds, so all variants get the same maps:
+
+```bash
+python -m kaucjowicze.experiments --seeds 30 --output results
+```
+
+This takes a few minutes and writes three CSV files, replacing earlier ones: `runs.csv` (one row per run), `timeline.csv` (one row per step) and `agents.csv` (one row per agent). A threshold not reached within the step limit (`t_50`, `t_90`, `t_100`) is left empty. Options: `--first-seed`, `--max-steps`.
+
+Figures and tables need the optional analysis dependencies:
+
+```bash
+pip install -e ".[dev,analysis]"
+python -m kaucjowicze.plots --input results --output results/figures
+```
+
+This writes the collection curves (`p1_collection_curve.png`, `p2_collection_curve.png`), the distribution of cans per agent (`p2_cans_per_agent.png`) and `summary.md` with means, 95% confidence intervals and Mann-Whitney p-values. The `results/` directory is not tracked by git.
+
 ### 5. Run tests and linters
 
 ```bash
