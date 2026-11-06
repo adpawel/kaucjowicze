@@ -120,6 +120,15 @@ def summary_table(runs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _mann_whitney_p(a: pd.Series, b: pd.Series) -> float:
+    """Two-sided p-value. With all values equal there is no difference to detect, so it is 1;
+    SciPy gives 1 or NaN for that case depending on its version.
+    """
+    if pd.concat([a, b]).nunique() == 1:
+        return 1.0
+    return float(stats.mannwhitneyu(a, b, alternative="two-sided").pvalue)
+
+
 def significance_table(runs: pd.DataFrame) -> pd.DataFrame:
     """Two-sided Mann-Whitney tests between variants for t_90 and Gini, uncorrected."""
     rows = []
@@ -132,13 +141,12 @@ def significance_table(runs: pd.DataFrame) -> pd.DataFrame:
             ("t_90", censored(a, "t_90"), censored(b, "t_90")),
             ("gini", a["gini"], b["gini"]),
         ):
-            p_value = stats.mannwhitneyu(values_a, values_b, alternative="two-sided").pvalue
             rows.append(
                 {
                     "metric": metric,
                     "variant_a": variant_a,
                     "variant_b": variant_b,
-                    "p_value": float(p_value),
+                    "p_value": _mann_whitney_p(values_a, values_b),
                 }
             )
     return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])

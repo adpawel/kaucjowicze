@@ -241,7 +241,7 @@ Metryki liczy `metrics.py`, a testy i przedziały ufności `plots.py`. Zapis met
 
 **Krzywa zbierania.** Przebieg, który skończył się przed T, zostaje do końca wykresu na swojej końcowej wartości. Bez tego najszybsze przebiegi wypadałyby ze średniej, a krzywa pod koniec by spadała. Pasmo liczymy osobno dla każdego kroku tym samym wzorem. Nie przycinamy go do liczby puszek, więc pod koniec może nieznacznie ją przekraczać.
 
-**Test istotności.** Dwustronny test Manna-Whitneya, jak w `MILESTONES.md`, dla t₉₀ oraz Giniego. Test nie korzysta z tego, że warianty mają te same mapy. Test parami (np. Wilcoxona) mógłby mieć większą moc, ale zostajemy przy ustalonym planie. Nie stosujemy korekty na wielokrotne porównania, więc p-wartości trzeba czytać z tym zastrzeżeniem.
+**Test istotności.** Dwustronny test Manna-Whitneya, jak w `MILESTONES.md`, dla t₉₀ oraz Giniego. Test nie korzysta z tego, że warianty mają te same mapy. Test parami (np. Wilcoxona) mógłby mieć większą moc, ale zostajemy przy ustalonym planie. Nie stosujemy korekty na wielokrotne porównania, więc p-wartości trzeba czytać z tym zastrzeżeniem. Gdy wszystkie wartości obu wariantów są równe (np. żaden przebieg nie osiągnął progu), przyjmujemy p = 1, bo nie ma różnicy do wykrycia. Robimy to jawnie, ponieważ scipy zwraca w tym przypadku 1 albo NaN, zależnie od wersji (1.15.3 i 1.18.1).
 
 **Rozkład puszek na agenta.** Wykres pudełkowy łączy agentów ze wszystkich przebiegów wariantu (600 wartości). Agenci jednego przebiegu nie są niezależni, więc wykres jest tylko opisowy, a test wykonujemy na Ginim liczonym dla przebiegu.
 

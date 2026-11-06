@@ -160,7 +160,7 @@ def test_significance_does_not_separate_identical_variants():
 def test_significance_when_all_runs_hit_the_limit_shows_no_difference():
     missing = [float("nan")] * 5
     table = significance_table(_two_variants(missing, missing))
-    assert table[table["metric"] == "t_90"].iloc[0]["p_value"] == pytest.approx(1.0)
+    assert table["p_value"].tolist() == [1.0, 1.0]  # Gini is equal in these runs as well
 
 
 def test_significance_counts_unreached_runs_as_slowest():
