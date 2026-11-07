@@ -174,7 +174,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--first-seed", type=int, default=0, help="first seed of the list")
     parser.add_argument("--max-steps", type=int, default=None, help="step limit T")
     parser.add_argument("--map", choices=MAPS, default=defaults.map_name, help="map to run on")
-    parser.add_argument("--output", type=Path, default=Path("results"), help="output directory")
+    parser.add_argument(
+        "--output", type=Path, default=None, help="output directory (default: results/<map>)"
+    )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
         parser.error("--seeds must be positive")
@@ -186,8 +188,9 @@ def main(argv: list[str] | None = None) -> None:
 
     config = SimulationConfig(map_name=args.map, max_steps=args.max_steps)
     seeds = range(args.first_seed, args.first_seed + args.seeds)
-    write_tables(run_experiment(seeds, config, progress=report), args.output)
-    print(f"Results written to {args.output}")
+    output = args.output or Path("results") / args.map
+    write_tables(run_experiment(seeds, config, progress=report), output)
+    print(f"Results written to {output}")
 
 
 if __name__ == "__main__":

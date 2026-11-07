@@ -222,6 +222,13 @@ def _markdown_table(header: Sequence[str], rows: Iterable[Sequence[object]]) -> 
     return "\n".join(f"| {line} |" for line in lines)
 
 
+def map_label(runs: pd.DataFrame) -> str:
+    """Name of the map the runs come from; files made before maps were recorded have none."""
+    if "map" not in runs:
+        return "map not recorded"
+    return ", ".join(sorted(runs["map"].unique()))
+
+
 def format_summary(runs: pd.DataFrame) -> str:
     """Summary and significance tables as Markdown."""
     summary = _markdown_table(
@@ -260,6 +267,7 @@ def format_summary(runs: pd.DataFrame) -> str:
     )
     return (
         "# Summary\n\n"
+        f"Map: {map_label(runs)}.\n\n"
         "Mean ± 95% confidence interval. A run below a threshold counts as the step limit T.\n\n"
         f"{summary}\n\n"
         "## Significance\n\n"
@@ -274,16 +282,18 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     written = []
     available = set(results.runs["variant"])
+    label = map_label(results.runs)
     if available.issuperset(P1_VARIANTS):
         path = output / "p1_collection_curve.png"
-        plot_collection_curves(results, P1_VARIANTS, "P1: ACO vs random walk", path)
+        plot_collection_curves(results, P1_VARIANTS, f"P1: ACO vs random walk ({label})", path)
         written.append(path)
     if available.issuperset(P2_VARIANTS):
         path = output / "p2_collection_curve.png"
-        plot_collection_curves(results, P2_VARIANTS, "P2: shared vs individual reward", path)
+        title = f"P2: shared vs individual reward ({label})"
+        plot_collection_curves(results, P2_VARIANTS, title, path)
         written.append(path)
         path = output / "p2_cans_per_agent.png"
-        plot_cans_per_agent(results, P2_VARIANTS, "P2: cans delivered per agent", path)
+        plot_cans_per_agent(results, P2_VARIANTS, f"P2: cans delivered per agent ({label})", path)
         written.append(path)
     path = output / "summary.md"
     path.write_text(format_summary(results.runs), encoding="utf-8")
@@ -293,16 +303,19 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Make figures and tables from experiment CSVs")
-    parser.add_argument("--input", type=Path, default=Path("results"), help="directory with CSVs")
     parser.add_argument(
-        "--output", type=Path, default=Path("results/figures"), help="directory for the report"
+        "--input", type=Path, default=Path("results/test"), help="directory with CSVs"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=None, help="report directory (default: <input>/figures)"
     )
     args = parser.parse_args(argv)
 
     results = load_results(args.input)
-    write_report(results, args.output)
+    output = args.output or args.input / "figures"
+    write_report(results, output)
     print(format_summary(results.runs))
-    print(f"Report written to {args.output}")
+    print(f"Report written to {output}")
 
 
 if __name__ == "__main__":

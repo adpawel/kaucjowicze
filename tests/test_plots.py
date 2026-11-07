@@ -13,6 +13,7 @@ from kaucjowicze.plots import (  # noqa: E402
     censored,
     collection_curves,
     curve_band,
+    format_summary,
     load_results,
     main,
     mean_ci,
@@ -228,3 +229,14 @@ def test_command_line_writes_report_to_chosen_directory(result_dir, tmp_path, ca
 
     assert (tmp_path / "figures" / "p2_cans_per_agent.png").exists()
     assert "t_90" in capsys.readouterr().out
+
+
+def test_summary_names_the_map(result_dir):
+    runs = load_results(result_dir).runs
+    assert "Map: test." in format_summary(runs)
+    assert "Map: map not recorded." in format_summary(runs.drop(columns="map"))
+
+
+def test_report_goes_next_to_the_results_by_default(result_dir):
+    main(["--input", str(result_dir)])
+    assert (result_dir / "figures" / "summary.md").exists()
