@@ -235,7 +235,7 @@ def test_campus_window_draws_the_photo_and_b_switches_it_off(window):
     _, font = window
     config = SimulationConfig(map_name="campus")
     sim = build_simulation("aco", 0, "shared", config)
-    cell_size = gui.fit_cell_size(sim.grid)
+    cell_size = gui.fit_cell_size(sim.grid, (1920, 1080))
     screen = pygame.display.set_mode(gui.window_size(sim, "aco/shared", 0, font, cell_size))
     photo = gui.load_photo(sim, cell_size)
     assert photo.get_size() == (sim.grid.width * cell_size, sim.grid.height * cell_size)
@@ -251,3 +251,25 @@ def test_campus_window_draws_the_photo_and_b_switches_it_off(window):
 
 def test_map_without_a_photo_has_nothing_to_load(window):
     assert gui.load_photo(_make_sim(), 10) is None
+
+
+@pytest.mark.parametrize(
+    ("screen", "expected"),
+    [
+        ((1920, 1080), 10),  # the largest size, even with room for more
+        ((1366, 768), 6),  # (768 - 66 - 80) // 91
+        ((500, 2000), 5),  # limited by the width
+        ((-1, -1), gui.CELL_SIZE),  # screen size unknown
+    ],
+)
+def test_cell_size_fits_the_window_on_the_screen(screen, expected):
+    assert gui.fit_cell_size(Grid(100, 91), screen) == expected
+
+
+def test_window_on_a_small_laptop_fits_with_its_status_bar(window):
+    _, font = window
+    sim = build_simulation("aco", 0, "shared", SimulationConfig(map_name="campus"))
+    cell_size = gui.fit_cell_size(sim.grid, (1366, 768))
+    width, height = gui.window_size(sim, "aco/shared", 0, font, cell_size)
+    assert width <= 1366
+    assert height <= 768 - gui.SCREEN_MARGIN

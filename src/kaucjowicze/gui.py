@@ -19,11 +19,11 @@ from kaucjowicze.view import (
 )
 
 CELL_SIZE = 10  # pixels per grid cell
-MAX_MAP_HEIGHT = 800  # taller maps get smaller cells, so the window fits a laptop screen
 HUD_HEIGHT = 66
 HUD_LINE_HEIGHT = 20
 HUD_PADDING = 4
 FONT_SIZE = 22
+SCREEN_MARGIN = 80  # room for the title bar and the taskbar
 HUD_TEXT_COLOR = (30, 30, 30)
 WINDOW_COLOR = (225, 225, 225)  # status bar and the area next to a narrow map
 PHOTO_BRIGHTNESS = 215  # of 255: a slightly darker photo lets the cans and agents stand out
@@ -60,9 +60,13 @@ def apply_key(key: int, playback: Playback) -> Action:
     return Action.NONE
 
 
-def fit_cell_size(grid: Grid) -> int:
-    """Pixels per cell for a window that fits the screen."""
-    return max(1, min(CELL_SIZE, MAX_MAP_HEIGHT // grid.height))
+def fit_cell_size(grid: Grid, screen_size: tuple[int, int]) -> int:
+    """Pixels per cell for a window that fits the screen, with its status bar."""
+    screen_width, screen_height = screen_size
+    if screen_width <= 0 or screen_height <= 0:  # the system did not report the screen
+        return CELL_SIZE
+    room = screen_height - HUD_HEIGHT - SCREEN_MARGIN
+    return max(1, min(CELL_SIZE, screen_width // grid.width, room // grid.height))
 
 
 def load_photo(sim: Simulation, cell_size: int) -> pygame.Surface | None:
@@ -149,11 +153,12 @@ def run_gui(
     """
     sim = make_sim()
     playback = Playback()
-    cell_size = cell_size or fit_cell_size(sim.grid)
 
     pygame.init()
     try:
         font = pygame.font.Font(None, FONT_SIZE)
+        info = pygame.display.Info()  # before set_mode this is the size of the screen
+        cell_size = cell_size or fit_cell_size(sim.grid, (info.current_w, info.current_h))
         screen = pygame.display.set_mode(window_size(sim, variant, seed, font, cell_size))
         photo = load_photo(sim, cell_size)
         pygame.display.set_caption(f"Kaucjowicze: {variant}")
