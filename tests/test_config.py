@@ -87,6 +87,7 @@ def test_can_layout_defaults_depend_on_the_map_and_can_be_overridden():
     assert SimulationConfig(map_name="campus", n_background_cans=7).n_background_cans == 7
 
 
-def test_negative_dormitory_distance_is_rejected():
+@pytest.mark.parametrize("distance", [0, -1])
+def test_dormitory_distance_must_be_positive(distance):
     with pytest.raises(ValueError, match="dormitory"):
-        SimulationConfig(cluster_dorm_distance=-1)
+        SimulationConfig(cluster_dorm_distance=distance)

@@ -75,3 +75,12 @@ def test_cans_gather_around_the_dormitory():
     assert grid.total_cans == 90
     assert grid.cans[:, 25:].sum() == 0
     assert not grid.cans[grid.obstacles].any()
+
+
+def test_no_free_cell_near_a_dormitory_is_an_error_and_does_not_lift_the_constraint():
+    grid = Grid(20, 20)
+    grid.add_obstacle(0, 0, 8, 8)
+    grid.dormitories[0:2, 0:2] = True  # surrounded by other obstacles
+    config = SimulationConfig(cluster_dorm_distance=2)
+    with pytest.raises(ValueError, match="No free cell within 2 cells"):
+        _cluster_candidates(grid, config, grid.free_cells())

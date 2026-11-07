@@ -24,6 +24,8 @@ def scatter_cans(grid: Grid, config: SimulationConfig, rng: np.random.Generator)
 
 def _cluster_candidates(grid: Grid, config: SimulationConfig, free: np.ndarray) -> np.ndarray:
     """Free cells close to a dormitory, or all free cells on a map without dormitories."""
+    if not grid.dormitories.any():
+        return free
     distance = config.cluster_dorm_distance
     size = 2 * distance + 1
     windows = np.lib.stride_tricks.sliding_window_view(
@@ -31,7 +33,9 @@ def _cluster_candidates(grid: Grid, config: SimulationConfig, free: np.ndarray) 
     )
     near = windows.any(axis=(2, 3))
     close = free[near[free[:, 1], free[:, 0]]]
-    return close if len(close) > 0 else free
+    if len(close) == 0:
+        raise ValueError(f"No free cell within {distance} cells of a dormitory")
+    return close
 
 
 def _place_cluster(

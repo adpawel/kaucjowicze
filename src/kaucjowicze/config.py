@@ -66,8 +66,8 @@ class SimulationConfig:
         for name, value in MAP_DEFAULTS[self.map_name].items():
             if getattr(self, name) is None:  # the dataclass is frozen
                 object.__setattr__(self, name, value)
-        if self.cluster_dorm_distance < 0:
-            raise ValueError("Cluster distance from a dormitory must not be negative")
+        if self.cluster_dorm_distance < 1:  # dormitories are obstacles, so a centre is never on one
+            raise ValueError("Cluster distance from a dormitory must be positive")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("Map dimensions must be positive")
         if self.bag_capacity <= 0:
