@@ -13,6 +13,7 @@ class Grid:
         self.width = width
         self.height = height
         self.obstacles = np.zeros((height, width), dtype=bool)
+        self.dormitories = np.zeros((height, width), dtype=bool)  # a part of the obstacles
         self.cans = np.zeros((height, width), dtype=np.int32)
         self.bases: list[Position] = []
 

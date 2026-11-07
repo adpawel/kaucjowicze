@@ -2,20 +2,41 @@
 
 from dataclasses import dataclass
 
+TEST_MAP = "test"
+CAMPUS_MAP = "campus"
+MAPS = (TEST_MAP, CAMPUS_MAP)
+MAP_DEFAULTS = {
+    TEST_MAP: {
+        "cans_per_cluster": 40,
+        "cluster_spread": 3.0,
+        "n_background_cans": 30,
+        "max_steps": 3000,
+    },
+    CAMPUS_MAP: {
+        "cans_per_cluster": 45,
+        "cluster_spread": 2.0,
+        "n_background_cans": 0,
+        "max_steps": 20000,
+    },
+}
+
 
 @dataclass(frozen=True)
 class SimulationConfig:
     """All tunable parameters of a single simulation run."""
 
     # Map
+    map_name: str = TEST_MAP  # the campus map has its own size, `width` and `height` are ignored
     width: int = 100
     height: int = 60
 
     # Cans
     n_clusters: int = 6
-    cans_per_cluster: int = 40
-    cluster_spread: float = 3.0  # standard deviation of can positions around a cluster centre
-    n_background_cans: int = 30  # cans scattered uniformly outside clusters
+    # `None` below stands for the value in `MAP_DEFAULTS`
+    cans_per_cluster: int | None = None
+    cluster_spread: float | None = None  # standard deviation of cans around a cluster centre
+    n_background_cans: int | None = None  # cans scattered uniformly outside clusters
+    cluster_dorm_distance: int = 4  # cluster centres lie this close to a dormitory, if any
 
     # Agents
     n_agents: int = 20
@@ -34,12 +55,19 @@ class SimulationConfig:
     crowd_penalty: float = 0.0  # trail ahead of a crowd counts this much; 1 turns avoidance off
 
     # Time
-    max_steps: int = 3000  # T: simulation limit
+    max_steps: int | None = None  # T: simulation limit
 
     # Reproducibility
     seed: int | None = None
 
     def __post_init__(self) -> None:
+        if self.map_name not in MAPS:
+            raise ValueError(f"Unknown map: {self.map_name}")
+        for name, value in MAP_DEFAULTS[self.map_name].items():
+            if getattr(self, name) is None:  # the dataclass is frozen
+                object.__setattr__(self, name, value)
+        if self.cluster_dorm_distance < 0:
+            raise ValueError("Cluster distance from a dormitory must not be negative")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("Map dimensions must be positive")
         if self.bag_capacity <= 0:

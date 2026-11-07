@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import numpy as np
 
+from kaucjowicze.config import MAPS, TEST_MAP, SimulationConfig
 from kaucjowicze.factory import ALGORITHMS, build_simulation
 from kaucjowicze.rewards import REWARDS, SHARED, agent_rewards
 
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--reward", choices=REWARDS, default=None, help="reward of ACO agents (default: shared)"
     )
+    parser.add_argument("--map", choices=MAPS, default=TEST_MAP, help="map to run on")
     parser.add_argument("--show-map", action="store_true", help="print the map before the run")
     parser.add_argument("--gui", action="store_true", help="show the simulation in a window")
     args = parser.parse_args(argv)
@@ -45,14 +47,15 @@ def main(argv: list[str] | None = None) -> None:
         if seed is None:  # restart has to reproduce the same map, so the seed must be known
             seed = int(np.random.default_rng().integers(2**31))
 
-    sim = build_simulation(args.algorithm, seed, reward)
+    config = SimulationConfig(map_name=args.map)
+    sim = build_simulation(args.algorithm, seed, reward, config)
     grid = sim.grid
     if args.show_map:
         print(grid.render_ascii())
         print()
 
     if run_gui is not None:
-        run_gui(lambda: build_simulation(args.algorithm, seed, reward), variant, seed)
+        run_gui(lambda: build_simulation(args.algorithm, seed, reward, config), variant, seed)
         return
 
     sim.run()

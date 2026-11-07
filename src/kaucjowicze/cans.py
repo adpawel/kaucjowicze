@@ -12,13 +12,26 @@ def scatter_cans(grid: Grid, config: SimulationConfig, rng: np.random.Generator)
     if len(free) == 0:
         raise ValueError("Grid has no free cells to place cans on")
 
-    centers = free[rng.choice(len(free), size=config.n_clusters, replace=True)]
+    candidates = _cluster_candidates(grid, config, free)
+    centers = candidates[rng.choice(len(candidates), size=config.n_clusters, replace=True)]
     for cx, cy in centers:
         _place_cluster(grid, (int(cx), int(cy)), config, rng)
 
     for idx in rng.choice(len(free), size=config.n_background_cans, replace=True):
         x, y = free[idx]
         grid.add_can((int(x), int(y)))
+
+
+def _cluster_candidates(grid: Grid, config: SimulationConfig, free: np.ndarray) -> np.ndarray:
+    """Free cells close to a dormitory, or all free cells on a map without dormitories."""
+    distance = config.cluster_dorm_distance
+    size = 2 * distance + 1
+    windows = np.lib.stride_tricks.sliding_window_view(
+        np.pad(grid.dormitories, distance), (size, size)
+    )
+    near = windows.any(axis=(2, 3))
+    close = free[near[free[:, 1], free[:, 0]]]
+    return close if len(close) > 0 else free
 
 
 def _place_cluster(

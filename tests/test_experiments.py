@@ -67,6 +67,7 @@ def test_columns_follow_the_documented_format():
         "algorithm",
         "reward",
         "scenario",
+        "map",
         "n_agents",
         "k",
         "rho",

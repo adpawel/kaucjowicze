@@ -6,7 +6,7 @@ import numpy as np
 
 from kaucjowicze.cans import scatter_cans
 from kaucjowicze.config import SimulationConfig
-from kaucjowicze.maps import build_test_map
+from kaucjowicze.maps import build_map
 from kaucjowicze.pathfinding import distance_map
 from kaucjowicze.policies import AcoPolicy, IndividualPolicy, RandomWalkPolicy
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
@@ -29,7 +29,7 @@ def build_simulation(
     """
     config = replace(config or SimulationConfig(), seed=seed)
     rng = np.random.default_rng(config.seed)
-    grid = build_test_map(config)
+    grid = build_map(config)
     scatter_cans(grid, config, rng)
     if algorithm == "random":
         if reward is not None:
