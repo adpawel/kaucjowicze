@@ -157,3 +157,44 @@ def test_dormitories_are_kept_apart_from_other_buildings(tmp_path):
     tool.save_mask(campus, path)
     grid = load_mask(path)
     assert (grid.dormitories == campus.dormitories).all()
+
+
+def test_underground_tunnel_does_not_cut_through_a_building():
+    tunnel = _way({"highway": "footway", "tunnel": "yes", "layer": "-1"}, (4.5, 7.5), (9.5, 7.5))
+    campus = tool.build_map([_base_path(), _block(), tunnel], SMALL)
+    assert campus.buildings[7, 7]
+
+
+def test_underground_path_does_not_open_a_fence():
+    path = _way({"highway": "footway", "layer": "-1"}, (5.5, 5.5), (15.5, 5.5))
+    campus = tool.build_map([_base_path(), _fence_across(), path], SMALL)
+    assert campus.barriers[5, 10]
+
+
+@pytest.mark.parametrize(
+    ("tags", "opened"),
+    [
+        ({}, True),
+        ({"locked": "yes"}, False),
+        ({"access": "private"}, False),
+        ({"access": "no"}, False),
+        ({"access": "private", "foot": "yes"}, True),
+    ],
+)
+def test_only_usable_gates_open_a_fence(tags, opened):
+    lat, lon = _geo(10.5, 8.5)
+    gate = {"type": "node", "tags": {"barrier": "gate", **tags}, "lat": lat, "lon": lon}
+    campus = tool.build_map([_base_path(), _fence_across(), gate], SMALL)
+    assert campus.barriers[8, 10] != opened
+
+
+@pytest.mark.parametrize(
+    "data", [{"remark": "runtime error: timeout", "elements": [{}]}, {"elements": []}, {}]
+)
+def test_incomplete_overpass_response_is_rejected(data):
+    with pytest.raises(ValueError, match="Overpass"):
+        tool.check_overpass_response(data)
+
+
+def test_complete_overpass_response_is_accepted():
+    tool.check_overpass_response({"elements": [{}]})

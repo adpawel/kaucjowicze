@@ -48,6 +48,8 @@ OVERPASS_QUERY = (
 NOT_OBSTACLE_BUILDINGS = {"roof", "bridge"}  # people walk under these
 OBSTACLE_BARRIERS = {"fence", "hedge", "wall", "retaining_wall"}
 OPENING_NODES = {"gate", "lift_gate", "swing_gate", "wicket_gate"}
+CLOSED_ACCESS = {"private", "no"}
+FOOT_ALLOWED = {"yes", "designated", "permissive"}
 NOT_WALKABLE_HIGHWAYS = {"construction"}
 PASSAGE_TUNNELS = {"building_passage", "yes"}
 BASE_STREET = "Autostrada MS AGH"
@@ -260,7 +262,7 @@ def build_map(elements: list[dict], frame: Frame) -> CampusMap:
                     set_cells(barriers, _near(path_cells, crossing), False)
 
     for tags, point in nodes:
-        if tags.get("barrier") in OPENING_NODES:
+        if _is_open_gate(tags):
             x, y = math.floor(point[0]), math.floor(point[1])
             set_cells(barriers, [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)], False)
 
@@ -280,11 +282,28 @@ def _spans_frame(points: list[Point], frame: Frame) -> bool:
     return max(xs) >= 0 and min(xs) < frame.width and max(ys) >= 0 and min(ys) < frame.height
 
 
+def _is_underground(tags: dict) -> bool:
+    """A way below ground does not open what is above it."""
+    try:
+        return int(tags.get("layer", "0")) < 0
+    except ValueError:  # OSM values are free text, e.g. "-1;0"
+        return False
+
+
+def _is_open_gate(tags: dict) -> bool:
+    if tags.get("barrier") not in OPENING_NODES:
+        return False
+    if tags.get("foot") in FOOT_ALLOWED:
+        return True
+    return tags.get("locked") != "yes" and tags.get("access") not in CLOSED_ACCESS
+
+
 def _is_walkable_path(tags: dict) -> bool:
     return (
         "highway" in tags
         and tags["highway"] not in NOT_WALKABLE_HIGHWAYS
         and tags.get("foot") != "no"
+        and not _is_underground(tags)
     )
 
 
@@ -324,6 +343,14 @@ def save_mask(campus: CampusMap, path: Path) -> None:
     Image.fromarray(image, "RGB").save(path, optimize=True)
 
 
+def check_overpass_response(data: dict) -> None:
+    """Overpass reports a timeout or lack of memory with status 200 and partial elements."""
+    if "remark" in data:
+        raise ValueError(f"Incomplete Overpass response: {data['remark']}")
+    if not data.get("elements"):
+        raise ValueError("Overpass returned no elements")
+
+
 def fetch_osm(path: Path) -> None:
     body = urllib.parse.urlencode({"data": OVERPASS_QUERY}).encode()
     request = urllib.request.Request(
@@ -331,6 +358,7 @@ def fetch_osm(path: Path) -> None:
     )
     with urllib.request.urlopen(request, timeout=180) as response:
         data = json.load(response)
+    check_overpass_response(data)  # before the file is touched, so that it stays usable
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
