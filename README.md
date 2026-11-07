@@ -1,109 +1,66 @@
 # Kaucjowicze
 
-Kaucjowicze is a simulation of agents collecting deposit-return cans across the AGH Student Campus (Miasteczko Studenckie AGH) using Ant Colony Optimization (ACO). Agents carry cans back to a collection point and leave pheromone trails that lead others to areas with many cans, and we compare this approach against a random-walk baseline. 
+A simulation of agents collecting deposit-return cans on the AGH Student Campus map using Ant Colony Optimization (ACO). Agents bring cans back to a collection point and leave pheromone trails that lead others to areas with many cans. We compare this with a random-walk baseline.
 
-The project is written in Python with NumPy, uses Pygame for visualization and pandas for analyzing results stored in CSV files.
-
-## How to run
+## Setup
 
 Requires Python 3.10 or newer.
-
-### 1. Clone the repository
 
 ```bash
 git clone https://github.com/adpawel/kaucjowicze.git
 cd kaucjowicze
-```
 
-### 2. Create and activate a virtual environment
-
-Windows (PowerShell):
-
-```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
+.venv\Scripts\Activate.ps1      # Windows (PowerShell)
+source .venv/bin/activate       # Linux / macOS
 
-Linux / macOS:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install the project with development tools
-
-```bash
 python -m pip install --upgrade pip
-pip install -e ".[dev]"
+pip install -e ".[dev,gui,analysis]"
 ```
 
-Upgrading pip is required: older versions (e.g. 21.x) cannot install the project in editable mode.
+Upgrading pip is required, because older versions cannot install the project in editable mode. The `gui` extra is needed only for the window and `analysis` only for figures.
 
-### 4. Run the simulation
+## Run a simulation
 
 ```bash
-python -m kaucjowicze --seed 0
+python -m kaucjowicze --seed 0                                      # random walk
+python -m kaucjowicze --algorithm aco --seed 0                      # ACO, shared reward
+python -m kaucjowicze --algorithm aco --reward individual --seed 0  # individual reward
 ```
 
-This builds the test map, scatters cans and runs a headless simulation: agents start at the base, search for cans, return when their bag is full (or when they have not seen a new can for a while) and go out again. The run ends when all cans are delivered or after the step limit. A summary is printed at the end (steps, collected cans, trips, path length, cans per agent).
+Add `--map campus` to run on the AGH Student Campus instead of the test map, `--gui` to open a window or `--show-map` to print the map before the run. Default parameters are in `src/kaucjowicze/config.py`.
 
-Options:
-
-- `--algorithm random|aco`: movement policy, the random-walk baseline (default) or ACO,
-- `--reward shared|individual`: reward of ACO agents, shared by default (not available for the random walk),
-- `--show-map`: print the map before the run (`#` obstacle, `B` base, digits = number of cans, `+` more than 9, `.` empty).
-
-With `--algorithm aco` an agent walking home leaves a trail on its way, as strong as the number of cans it saw left at the source, so an exhausted source leaves none. Trails evaporate every step. A searching agent follows trails leading away from the base, making a random move instead with probability epsilon. Where there is no trail it explores exactly like the random walk.
-
-The reward decides how agents behave:
-
-- `shared`: all delivered cans are split equally. Agents lay and follow trails as described above, and ignore a trail heading into an area with more searching agents than cans.
-- `individual`: each agent keeps what it delivered. Agents leave no trails, so there is no pheromone. Each one remembers its richest source and returns there by the shortest path until the source is exhausted, regardless of the others.
-
-The summary also prints the reward per agent for these variants.
-
-Default parameters (number of agents, bag capacity, vision radius, pheromone, step limit, ...) are defined in `SimulationConfig` in `src/kaucjowicze/config.py`.
-
-### Visualization
-
-The window needs Pygame, which is an optional dependency:
-
-```bash
-pip install -e ".[dev,gui]"
-python -m kaucjowicze --algorithm aco --reward shared --seed 0 --gui
-```
-
-The map shows obstacles (gray), the base (black, framed), cans (yellow to dark red as their number grows), pheromone (green, shared reward only) and agents (blue when searching, magenta when carrying). Without `--seed` a random seed is drawn and shown in the status bar, so a restart still gives the same map.
+Window controls:
 
 | Key | Action |
 |---|---|
 | Space | pause / resume |
-| `+` / `-` | faster / slower (1 to 500 steps per second) |
+| `+` / `-` | faster / slower |
 | `R` | restart with the same seed |
-| `P` | show / hide the pheromone heat map (`n/a` for the random walk and the individual reward) |
+| `P` | show / hide the pheromone |
+| `B` | switch between the aerial photo and the plain map (campus only) |
 | `Esc` | quit |
 
-### Experiments
-
-Run every variant (random walk, ACO with the shared reward, agents with the individual reward) on the same seeds, so all variants get the same maps:
+## Run experiments
 
 ```bash
 python -m kaucjowicze.experiments --seeds 30 --output results
-```
-
-This takes a few minutes and writes three CSV files, replacing earlier ones: `runs.csv` (one row per run), `timeline.csv` (one row per step) and `agents.csv` (one row per agent). A threshold not reached within the step limit (`t_50`, `t_90`, `t_100`) is left empty. Options: `--first-seed`, `--max-steps`.
-
-Figures and tables need the optional analysis dependencies:
-
-```bash
-pip install -e ".[dev,analysis]"
 python -m kaucjowicze.plots --input results --output results/figures
 ```
 
-This writes the collection curves (`p1_collection_curve.png`, `p2_collection_curve.png`), the distribution of cans per agent (`p2_cans_per_agent.png`) and `summary.md` with means, 95% confidence intervals and Mann-Whitney p-values. The `results/` directory is not tracked by git.
+The first command runs every variant on the same seeds and writes `runs.csv`, `timeline.csv` and `agents.csv`, replacing earlier files. It also accepts `--map`, `--first-seed` and `--max-steps`. The second one writes the figures and `summary.md` with means, confidence intervals and p-values. `results/` is not tracked by git.
 
-### 5. Run tests and linters
+## Campus map
+
+The campus map is `src/kaucjowicze/data/ms_agh_map.png`, with one pixel per 3 m cell: white is walkable, black is an obstacle, grey is a dormitory (an obstacle near which can clusters appear) and blue is the collection point. It can be edited by hand, and running the simulation reports a stray color or an enclosed area.
+
+`python tools/build_campus_map.py` generates it from `data/ms_agh_osm.json` and overwrites manual edits. Add `--fetch` to download fresh data and `--preview FILE` to write a picture for checking (needs the `analysis` extra).
+
+`src/kaucjowicze/data/ms_agh_photo.jpg` is the window background, cropped to the map by `python tools/build_campus_map.py --photo`. The simulation does not use it.
+
+Map data © OpenStreetMap contributors, available under the [Open Database License](https://www.openstreetmap.org/copyright). Aerial photo: Główny Urząd Geodezji i Kartografii, [geoportal.gov.pl](https://www.geoportal.gov.pl/pl/dane/ortofotomapa-orto/).
+
+## Tests and linters
 
 ```bash
 pytest
@@ -111,4 +68,11 @@ ruff check .
 ruff format --check .
 ```
 
-The same checks run in CI on every pull request and push to `master`.
+CI runs the same checks on every pull request and push to `master`.
+
+## Documentation
+
+- [`PLAN.md`](PLAN.md): project plan
+- [`MILESTONES.md`](MILESTONES.md): assumptions and milestones
+- [`ALGORITHM.md`](ALGORITHM.md): formulas, decisions and results
+- [`NAGRODY.md`](NAGRODY.md): open problems with rewards and proposed trail variants
