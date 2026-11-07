@@ -6,6 +6,7 @@ pygame = pytest.importorskip("pygame")
 from kaucjowicze import gui  # noqa: E402
 from kaucjowicze.agent import AgentState  # noqa: E402
 from kaucjowicze.config import SimulationConfig  # noqa: E402
+from kaucjowicze.factory import build_simulation  # noqa: E402
 from kaucjowicze.grid import Grid  # noqa: E402
 from kaucjowicze.policies import RandomWalkPolicy  # noqa: E402
 from kaucjowicze.simulation import Simulation  # noqa: E402
@@ -222,3 +223,31 @@ def test_restart_builds_a_new_simulation_and_keeps_view_settings(monkeypatch):
     gui.run_gui(make_sim, "random", 0)
     assert len(sims) == 2
     assert sims[1].step_count == 0  # still paused after the restart
+
+
+def test_b_key_toggles_the_photo():
+    playback = Playback()
+    assert gui.apply_key(pygame.K_b, playback) is gui.Action.NONE
+    assert not playback.show_photo
+
+
+def test_campus_window_draws_the_photo_and_b_switches_it_off(window):
+    _, font = window
+    config = SimulationConfig(map_name="campus")
+    sim = build_simulation("aco", 0, "shared", config)
+    cell_size = gui.fit_cell_size(sim.grid)
+    screen = pygame.display.set_mode(gui.window_size(sim, "aco/shared", 0, font, cell_size))
+    photo = gui.load_photo(sim, cell_size)
+    assert photo.get_size() == (sim.grid.width * cell_size, sim.grid.height * cell_size)
+
+    playback = Playback()
+    gui.draw(screen, font, sim, playback, "aco/shared", 0, cell_size, photo)
+    with_photo = pygame.surfarray.array3d(screen).copy()
+    playback.toggle_photo()
+    gui.draw(screen, font, sim, playback, "aco/shared", 0, cell_size, photo)
+    without_photo = pygame.surfarray.array3d(screen)
+    assert (with_photo != without_photo).any()
+
+
+def test_map_without_a_photo_has_nothing_to_load(window):
+    assert gui.load_photo(_make_sim(), 10) is None

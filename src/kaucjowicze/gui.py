@@ -5,23 +5,29 @@ from enum import Enum, auto
 
 import pygame
 
+from kaucjowicze.grid import Grid
+from kaucjowicze.maps import map_photo
 from kaucjowicze.simulation import Simulation
 from kaucjowicze.view import (
     BASE_COLOR,
     Playback,
     agent_color,
     compose_map_image,
+    compose_photo_overlay,
     hud_lines,
     longest_hud_lines,
 )
 
 CELL_SIZE = 10  # pixels per grid cell
+MAX_MAP_HEIGHT = 800  # taller maps get smaller cells, so the window fits a laptop screen
 HUD_HEIGHT = 66
 HUD_LINE_HEIGHT = 20
 HUD_PADDING = 4
 FONT_SIZE = 22
 HUD_TEXT_COLOR = (30, 30, 30)
 WINDOW_COLOR = (225, 225, 225)  # status bar and the area next to a narrow map
+PHOTO_BRIGHTNESS = 215  # of 255: a slightly darker photo lets the cans and agents stand out
+OUTLINE_COLOR = (255, 255, 255)  # around the agents and the base, visible on the photo
 FPS = 60
 MAX_FRAME_TIME = 0.25  # seconds; a stalled frame (e.g. a dragged window) must not cause a jump
 
@@ -45,11 +51,29 @@ def apply_key(key: int, playback: Playback) -> Action:
         playback.slower()
     elif key == pygame.K_p:
         playback.toggle_pheromone()
+    elif key == pygame.K_b:
+        playback.toggle_photo()
     elif key == pygame.K_r:
         return Action.RESTART
     elif key == pygame.K_ESCAPE:
         return Action.QUIT
     return Action.NONE
+
+
+def fit_cell_size(grid: Grid) -> int:
+    """Pixels per cell for a window that fits the screen."""
+    return max(1, min(CELL_SIZE, MAX_MAP_HEIGHT // grid.height))
+
+
+def load_photo(sim: Simulation, cell_size: int) -> pygame.Surface | None:
+    """The photo of the map, sized to the map on the screen, if the map has one."""
+    path = map_photo(sim.config)
+    if path is None:
+        return None
+    size = (sim.grid.width * cell_size, sim.grid.height * cell_size)
+    photo = pygame.transform.smoothscale(pygame.image.load(path).convert(), size)
+    photo.fill((PHOTO_BRIGHTNESS,) * 3, special_flags=pygame.BLEND_RGB_MULT)
+    return photo
 
 
 def window_size(
@@ -73,19 +97,28 @@ def draw(
     variant: str,
     seed: int,
     cell_size: int = CELL_SIZE,
+    photo: pygame.Surface | None = None,
 ) -> None:
     grid = sim.grid
     map_size = (grid.width * cell_size, grid.height * cell_size)
-    image = compose_map_image(grid, sim.pheromone, playback.show_pheromone)
-    # surfarray indexes pixels as [x, y], the grid as [y, x]
-    surface = pygame.surfarray.make_surface(image.swapaxes(0, 1))
+    on_photo = photo is not None and playback.show_photo
 
     screen.fill(WINDOW_COLOR)
+    if on_photo:
+        overlay = compose_photo_overlay(grid, sim.pheromone, playback.show_pheromone)
+        surface = pygame.image.frombuffer(overlay.tobytes(), (grid.width, grid.height), "RGBA")
+        screen.blit(photo, (0, 0))
+    else:
+        image = compose_map_image(grid, sim.pheromone, playback.show_pheromone)
+        # surfarray indexes pixels as [x, y], the grid as [y, x]
+        surface = pygame.surfarray.make_surface(image.swapaxes(0, 1))
     screen.blit(pygame.transform.scale(surface, map_size), (0, 0))
 
     # A single cell is easy to miss, so the base gets a frame around it
     for x, y in grid.bases:
         frame = pygame.Rect((x - 1) * cell_size, (y - 1) * cell_size, 3 * cell_size, 3 * cell_size)
+        if on_photo:
+            pygame.draw.rect(screen, OUTLINE_COLOR, frame.inflate(4, 4), width=2)
         pygame.draw.rect(screen, BASE_COLOR, frame, width=2)
 
     for agent in sim.agents:
@@ -93,7 +126,10 @@ def draw(
             agent.pos[0] * cell_size + cell_size // 2,
             agent.pos[1] * cell_size + cell_size // 2,
         )
-        pygame.draw.circle(screen, agent_color(agent.state), center, max(cell_size // 2, 1))
+        radius = max(cell_size // 2, 1)
+        if on_photo:
+            pygame.draw.circle(screen, OUTLINE_COLOR, center, radius + 1)
+        pygame.draw.circle(screen, agent_color(agent.state), center, radius)
 
     for i, line in enumerate(hud_lines(sim, variant, seed, playback)):
         text = font.render(line, True, HUD_TEXT_COLOR)
@@ -105,7 +141,7 @@ def run_gui(
     make_sim: Callable[[], Simulation],
     variant: str,
     seed: int,
-    cell_size: int = CELL_SIZE,
+    cell_size: int | None = None,
 ) -> None:
     """Open the window and play the simulation until it is closed.
 
@@ -113,11 +149,13 @@ def run_gui(
     """
     sim = make_sim()
     playback = Playback()
+    cell_size = cell_size or fit_cell_size(sim.grid)
 
     pygame.init()
     try:
         font = pygame.font.Font(None, FONT_SIZE)
         screen = pygame.display.set_mode(window_size(sim, variant, seed, font, cell_size))
+        photo = load_photo(sim, cell_size)
         pygame.display.set_caption(f"Kaucjowicze: {variant}")
         clock = pygame.time.Clock()
 
@@ -140,6 +178,6 @@ def run_gui(
                     break
                 sim.step()
 
-            draw(screen, font, sim, playback, variant, seed, cell_size)
+            draw(screen, font, sim, playback, variant, seed, cell_size, photo)
     finally:
         pygame.quit()

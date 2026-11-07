@@ -9,6 +9,7 @@ import numpy as np
 
 from kaucjowicze.agent import AgentState
 from kaucjowicze.grid import Grid
+from kaucjowicze.maps import map_photo
 from kaucjowicze.simulation import Simulation
 
 Color = tuple[int, int, int]
@@ -19,6 +20,8 @@ BASE_COLOR: Color = (20, 20, 20)
 CAN_FEW_COLOR: Color = (250, 200, 100)
 CAN_MANY_COLOR: Color = (165, 30, 30)
 PHEROMONE_COLOR: Color = (95, 200, 120)
+PHOTO_PHEROMONE_COLOR: Color = (70, 235, 255)  # green would vanish among the trees
+PHOTO_PHEROMONE_OPACITY = 0.85
 
 CAN_SATURATION = 10  # from this many cans in a cell the color stops changing
 
@@ -70,6 +73,26 @@ def compose_map_image(
     return image
 
 
+def compose_photo_overlay(
+    grid: Grid, pheromone: np.ndarray | None = None, show_pheromone: bool = False
+) -> np.ndarray:
+    """RGBA image of shape (height, width, 4) to draw over the photo, one pixel per cell.
+
+    The photo shows the obstacles itself, so only pheromone, cans and bases are drawn.
+    """
+    image = np.zeros((grid.height, grid.width, 4), dtype=np.uint8)
+    if show_pheromone and pheromone is not None and pheromone.max() > 0:
+        strength = pheromone / pheromone.max()
+        image[..., :3] = PHOTO_PHEROMONE_COLOR
+        image[..., 3] = 255 * PHOTO_PHEROMONE_OPACITY * strength
+    has_cans = grid.cans > 0
+    image[has_cans, :3] = _can_colors(grid.cans[has_cans])
+    image[has_cans, 3] = 255
+    for x, y in grid.bases:
+        image[y, x] = (*BASE_COLOR, 255)
+    return image
+
+
 @dataclass
 class Playback:
     """Viewer settings: they survive a restart and never affect the simulation itself."""
@@ -77,6 +100,7 @@ class Playback:
     paused: bool = False
     speed_index: int = SPEEDS.index(DEFAULT_SPEED)
     show_pheromone: bool = True
+    show_photo: bool = True
     _backlog: float = 0.0  # fraction of a step carried over to the next frame
 
     @property
@@ -88,6 +112,9 @@ class Playback:
 
     def toggle_pheromone(self) -> None:
         self.show_pheromone = not self.show_pheromone
+
+    def toggle_photo(self) -> None:
+        self.show_photo = not self.show_photo
 
     def faster(self) -> None:
         self.speed_index = min(self.speed_index + 1, len(SPEEDS) - 1)
@@ -112,15 +139,16 @@ def _format_hud(
     agents: str,
     speed: int,
     pheromone: str,
+    photo: str,
     flag: str | None,
 ) -> list[str]:
-    status = f"speed {speed} steps/s | pheromone {pheromone}"
+    status = f"speed {speed} steps/s | pheromone {pheromone} | photo {photo}"
     if flag is not None:
         status += f" | {flag}"
     return [
         f"{variant} | seed {seed} | {progress} | {agents}",
         status,
-        "space: pause | +/-: speed | R: restart | P: pheromone | Esc: quit",
+        "space: pause | +/-: speed | R: restart | P: pheromone | B: photo | Esc: quit",
     ]
 
 
@@ -133,6 +161,11 @@ def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> l
         pheromone = "n/a"
     else:
         pheromone = "on" if playback.show_pheromone else "off"
+
+    if map_photo(sim.config) is None:
+        photo = "n/a"
+    else:
+        photo = "on" if playback.show_photo else "off"
 
     flag = None
     if sim.is_finished:
@@ -147,6 +180,7 @@ def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> l
         f"searching {searching} | carrying {carrying}",
         playback.speed,
         pheromone,
+        photo,
         flag,
     )
 
@@ -162,5 +196,6 @@ def longest_hud_lines(sim: Simulation, variant: str, seed: int) -> list[str]:
         f"searching {n_agents} | carrying {n_agents}",
         max(SPEEDS),
         "n/a",
+        "off",
         "FINISHED",
     )
