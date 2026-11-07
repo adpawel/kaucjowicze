@@ -44,11 +44,11 @@ Window controls:
 ## Run experiments
 
 ```bash
-python -m kaucjowicze.experiments --seeds 30 --output results
-python -m kaucjowicze.plots --input results --output results/figures
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus
+python -m kaucjowicze.plots --input results/campus
 ```
 
-The first command runs every variant on the same seeds and writes `runs.csv`, `timeline.csv` and `agents.csv`, replacing earlier files. It also accepts `--map`, `--first-seed` and `--max-steps`. The second one writes the figures and `summary.md` with means, confidence intervals and p-values. `results/` is not tracked by git.
+The first command runs every variant on the same seeds and writes `runs.csv`, `timeline.csv` and `agents.csv`, replacing earlier files. They go to `results/<map>` unless `--output` says otherwise, and `--max-steps` changes the step limit. The second one writes the figures and `summary.md` with means, confidence intervals and p-values to `figures` next to the CSV files. `results/` is not tracked by git.
 
 ## Campus map
 
