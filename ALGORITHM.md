@@ -354,5 +354,5 @@ Pomiar z 7 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first
 | ziarna 0–29, poprzedni układ puszek (6 × 40 + 30 puszek tła, σ = 3, środki w dowolnym miejscu) | 8928 / 3859 / 4513 | 4.8 · 10⁻⁷ | 0.65 | 0.404 / 0.438 / 0.614 | 0.064 |
 
 - **Wnioski o szybkości nie zależą od tych zmian.** We wszystkich pomiarach ACO i N2 są istotnie szybsze od losowego spaceru, a między N1 i N2 nie ma istotnej różnicy.
-- **Pojedynczy przebieg jest bardzo czuły na drobne zmiany.** Otwarcie lub zamknięcie 5 komórek zmieniło średnie t₉₀ N1 na tych samych ziarnach z 2455 na 2204, bo ruchy agentów rozchodzą się już od pierwszych kroków. To rozrzut tej samej wielkości co przedział ufności, więc różnic tego rzędu nie należy interpretować.
+- **Pojedynczy przebieg jest bardzo czuły na drobne zmiany.** Zamknięcie 5 komórek zmieniło średnie t₉₀ N1 na tych samych ziarnach z 2455 na 2204. Różnica mieści się w przedziale ufności (± 559), więc różnic tego rzędu nie należy interpretować.
 - **Wniosek o Ginim N1 względem losowego spaceru zależy od układu puszek.** Przy skupiskach przy akademikach różnica jest istotna, a przy poprzednim, bardziej rozproszonym układzie nie była. Mierzymy go więc dla przyjętego założenia, a nie jako ogólną własność ACO.
