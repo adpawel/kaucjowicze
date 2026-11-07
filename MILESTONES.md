@@ -107,7 +107,7 @@ Wymagania na zajęcia:
 - sterowanie: pauza (spacja), szybkość (+/−), restart z tym samym ziarnem (R),
 - uruchomienie: `python -m kaucjowicze --algorithm aco --reward shared --seed 0 --gui`.
 
-Wizualizacja **tylko czyta stan symulacji**. Symulacja musi działać bez okna (CI, eksperymenty). Pygame dodajemy jako opcjonalną zależność `[gui]`, żeby CI go nie instalowało.
+Wizualizacja **tylko czyta stan symulacji**. Symulacja musi działać bez okna (CI, eksperymenty). Pygame dodajemy jako opcjonalną zależność `[gui]`. CI instaluje go do testów, które działają bez ekranu.
 
 ### 6. Do zrobienia: podział na branche
 
