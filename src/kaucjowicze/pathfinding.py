@@ -80,6 +80,28 @@ def visible_cans(grid: Grid, pos: Position, radius: int) -> int:
     return int(_view_window(grid, pos, radius).sum())
 
 
+def seen_cans(grid: Grid, pos: Position, radius: int) -> int:
+    """Cans the agent can see: within `radius` and reachable without leaving that window.
+
+    Unlike `visible_cans` this does not count cans behind a wall.
+    """
+    if not _view_window(grid, pos, radius).any():
+        return 0  # fast path: nothing in sight, skip the search
+    return sum(int(grid.cans[y, x]) for x, y in connected_cells(grid, pos, pos, radius))
+
+
+def connected_cells(grid: Grid, start: Position, center: Position, radius: int) -> set[Position]:
+    """Cells of the window around `center` that can be reached from `start` inside the window."""
+    cells = {start}
+    queue = deque([start])
+    while queue:
+        for nb in free_neighbours(grid, queue.popleft()):
+            if nb not in cells and within_radius(center, nb, radius):
+                cells.add(nb)
+                queue.append(nb)
+    return cells
+
+
 def first_step_to_nearest_can(grid: Grid, pos: Position, radius: int) -> Position | None:
     """First move towards the nearest can the agent can see.
 

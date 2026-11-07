@@ -5,7 +5,9 @@ from kaucjowicze.pathfinding import (
     NEIGHBOURS,
     distance_map,
     first_step_to_nearest_can,
+    seen_cans,
     step_closer,
+    visible_cans,
 )
 
 
@@ -109,3 +111,19 @@ def test_can_hidden_behind_wall_inside_window_is_not_seen():
     grid.add_obstacle(4, 0, 1, 7)  # full wall, can unreachable within window
     grid.add_can((5, 3))
     assert first_step_to_nearest_can(grid, (3, 3), radius=2) is None
+
+
+def test_seen_cans_does_not_count_cans_behind_a_wall():
+    grid = Grid(9, 7)
+    grid.add_can((3, 3), 2)  # under the agent
+    grid.add_can((4, 3))  # in the open
+    grid.add_obstacle(5, 0, 1, 7)
+    grid.add_can((6, 3), 5)  # within the radius, but no path inside the window leads there
+    assert seen_cans(grid, (3, 3), radius=3) == 3
+    assert visible_cans(grid, (3, 3), radius=3) == 8
+
+
+def test_seen_cans_without_a_can_in_the_window_is_zero():
+    grid = Grid(9, 7)
+    grid.add_can((8, 6))
+    assert seen_cans(grid, (1, 1), radius=2) == 0

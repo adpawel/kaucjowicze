@@ -13,11 +13,11 @@ from kaucjowicze.agent import Agent, AgentState
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
+    connected_cells,
     distance_map,
     free_neighbours,
     step_closer,
     visible_cans,
-    within_radius,
 )
 
 
@@ -169,15 +169,17 @@ class AcoPolicy:
 
         The window does not contain `pos`, so the agent never counts itself. A window without
         cans is no crowd: agents walking along a trail to a far source must not put each other off.
+        Only cells connected to `option` inside the window count, so a wall hides what is behind it.
         """
         reach = self.crowd_radius + 1
         ahead = (pos[0] + reach * (option[0] - pos[0]), pos[1] + reach * (option[1] - pos[1]))
-        cans = visible_cans(grid, ahead, self.crowd_radius)
+        if visible_cans(grid, ahead, self.crowd_radius) == 0:
+            return False  # fast path: nothing to crowd around, skip the search
+        region = connected_cells(grid, option, ahead, self.crowd_radius)
+        cans = sum(int(grid.cans[y, x]) for x, y in region)
         if cans == 0:
             return False
         searching = sum(
-            other.state is AgentState.SEARCHING
-            and within_radius(ahead, other.pos, self.crowd_radius)
-            for other in agents
+            other.state is AgentState.SEARCHING and other.pos in region for other in agents
         )
         return searching > cans
