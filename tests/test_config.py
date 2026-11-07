@@ -70,3 +70,24 @@ def test_crowd_avoidance_is_on_by_default():
 def test_invalid_crowd_parameters_rejected(kwargs):
     with pytest.raises(ValueError):
         SimulationConfig(**kwargs)
+
+
+def test_step_limit_defaults_to_the_one_of_the_map():
+    assert SimulationConfig().max_steps == 3000
+    assert SimulationConfig(map_name="campus").max_steps == 20000
+    assert SimulationConfig(map_name="campus", max_steps=5).max_steps == 5
+
+
+def test_can_layout_defaults_depend_on_the_map_and_can_be_overridden():
+    test_map = SimulationConfig()
+    assert (test_map.cans_per_cluster, test_map.cluster_spread) == (40, 3.0)
+    assert test_map.n_background_cans == 30
+    campus = SimulationConfig(map_name="campus")
+    assert (campus.n_clusters, campus.cans_per_cluster, campus.n_background_cans) == (6, 45, 0)
+    assert SimulationConfig(map_name="campus", n_background_cans=7).n_background_cans == 7
+
+
+@pytest.mark.parametrize("distance", [0, -1])
+def test_dormitory_distance_must_be_positive(distance):
+    with pytest.raises(ValueError, match="dormitory"):
+        SimulationConfig(cluster_dorm_distance=distance)

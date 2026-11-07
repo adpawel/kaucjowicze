@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from kaucjowicze.config import SimulationConfig
+from kaucjowicze.config import MAPS, SimulationConfig
 from kaucjowicze.factory import build_simulation
 from kaucjowicze.metrics import RunRecord, record_run
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
@@ -25,6 +25,7 @@ RUNS_COLUMNS = (
     "algorithm",
     "reward",
     "scenario",
+    "map",
     "n_agents",
     "k",
     "rho",
@@ -77,6 +78,7 @@ def _run_row(
         "algorithm": algorithm,
         "reward": reward,
         "scenario": SCENARIO,
+        "map": config.map_name,
         "n_agents": config.n_agents,
         "k": config.bag_capacity,
         "rho": config.evaporation_rate if follows_trails else None,
@@ -170,21 +172,25 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Compare the variants on a shared list of seeds")
     parser.add_argument("--seeds", type=int, default=30, help="number of seeds (maps)")
     parser.add_argument("--first-seed", type=int, default=0, help="first seed of the list")
-    parser.add_argument("--max-steps", type=int, default=defaults.max_steps, help="step limit T")
-    parser.add_argument("--output", type=Path, default=Path("results"), help="output directory")
+    parser.add_argument("--max-steps", type=int, default=None, help="step limit T")
+    parser.add_argument("--map", choices=MAPS, default=defaults.map_name, help="map to run on")
+    parser.add_argument(
+        "--output", type=Path, default=None, help="output directory (default: results/<map>)"
+    )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
         parser.error("--seeds must be positive")
-    if args.max_steps <= 0:
+    if args.max_steps is not None and args.max_steps <= 0:
         parser.error("--max-steps must be positive")
 
     def report(done: int, total: int, label: str) -> None:
         print(f"[{done}/{total}] {label}", flush=True)
 
-    config = SimulationConfig(max_steps=args.max_steps)
+    config = SimulationConfig(map_name=args.map, max_steps=args.max_steps)
     seeds = range(args.first_seed, args.first_seed + args.seeds)
-    write_tables(run_experiment(seeds, config, progress=report), args.output)
-    print(f"Results written to {args.output}")
+    output = args.output or Path("results") / args.map
+    write_tables(run_experiment(seeds, config, progress=report), output)
+    print(f"Results written to {output}")
 
 
 if __name__ == "__main__":

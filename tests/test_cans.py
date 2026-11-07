@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from kaucjowicze.cans import scatter_cans
+from kaucjowicze.cans import _cluster_candidates, scatter_cans
 from kaucjowicze.config import SimulationConfig
+from kaucjowicze.grid import Grid
 from kaucjowicze.maps import build_test_map
 
 
@@ -39,3 +40,47 @@ def test_test_map_has_reachable_base():
 def test_invalid_config_rejected():
     with pytest.raises(ValueError):
         SimulationConfig(bag_capacity=0)
+
+
+def _grid_with_dormitory() -> Grid:
+    grid = Grid(60, 40)
+    grid.add_obstacle(5, 5, 4, 4)
+    grid.dormitories[5:9, 5:9] = True
+    return grid
+
+
+def test_cluster_centres_lie_close_to_a_dormitory():
+    grid = _grid_with_dormitory()
+    config = SimulationConfig(cluster_dorm_distance=4)
+    candidates = _cluster_candidates(grid, config, grid.free_cells())
+    assert len(candidates) > 0
+    assert candidates[:, 0].min() >= 1 and candidates[:, 0].max() <= 12
+    assert candidates[:, 1].min() >= 1 and candidates[:, 1].max() <= 12
+    assert not grid.obstacles[candidates[:, 1], candidates[:, 0]].any()
+
+
+def test_without_dormitories_any_free_cell_can_be_a_centre():
+    grid = Grid(10, 10)
+    grid.add_obstacle(2, 2, 2, 2)
+    free = grid.free_cells()
+    assert (_cluster_candidates(grid, SimulationConfig(), free) == free).all()
+
+
+def test_cans_gather_around_the_dormitory():
+    grid = _grid_with_dormitory()
+    config = SimulationConfig(
+        n_clusters=3, cans_per_cluster=30, cluster_spread=1.0, n_background_cans=0
+    )
+    scatter_cans(grid, config, np.random.default_rng(0))
+    assert grid.total_cans == 90
+    assert grid.cans[:, 25:].sum() == 0
+    assert not grid.cans[grid.obstacles].any()
+
+
+def test_no_free_cell_near_a_dormitory_is_an_error_and_does_not_lift_the_constraint():
+    grid = Grid(20, 20)
+    grid.add_obstacle(0, 0, 8, 8)
+    grid.dormitories[0:2, 0:2] = True  # surrounded by other obstacles
+    config = SimulationConfig(cluster_dorm_distance=2)
+    with pytest.raises(ValueError, match="No free cell within 2 cells"):
+        _cluster_candidates(grid, config, grid.free_cells())

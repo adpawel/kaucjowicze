@@ -16,6 +16,7 @@ from kaucjowicze.view import (
     agent_color,
     can_color,
     compose_map_image,
+    compose_photo_overlay,
     hud_lines,
 )
 
@@ -163,3 +164,43 @@ def test_hud_shows_pheromone_status():
     assert "pheromone on" in "\n".join(hud_lines(sim, "random", 0, playback))
     playback.show_pheromone = False
     assert "pheromone off" in "\n".join(hud_lines(sim, "random", 0, playback))
+
+
+def test_photo_overlay_leaves_empty_cells_and_obstacles_transparent():
+    grid = Grid(4, 1)
+    grid.add_obstacle(0, 0, 1, 1)
+    grid.add_can((2, 0), 3)
+    grid.add_base((3, 0))
+    overlay = compose_photo_overlay(grid)
+    assert overlay[0, 0, 3] == 0
+    assert overlay[0, 1, 3] == 0
+    assert overlay[0, 2, 3] == 255
+    assert overlay[0, 3, 3] == 255
+
+
+def test_photo_overlay_shows_pheromone_only_when_enabled_and_cans_cover_it():
+    grid = Grid(3, 1)
+    grid.add_can((2, 0))
+    pheromone = np.array([[0.0, 1.0, 1.0]])
+    assert compose_photo_overlay(grid, pheromone, show_pheromone=False)[0, 1, 3] == 0
+    shown = compose_photo_overlay(grid, pheromone, show_pheromone=True)
+    assert shown[0, 0, 3] == 0
+    assert 0 < shown[0, 1, 3] < 255
+    assert shown[0, 2, 3] == 255
+
+
+def test_photo_toggle_and_hud_status():
+    grid = Grid(6, 4)
+    grid.add_base((1, 1))
+    playback = Playback()
+    assert playback.show_photo
+    playback.toggle_photo()
+    assert not playback.show_photo
+    policy = RandomWalkPolicy(0.5)
+    test_map = Simulation(SimulationConfig(n_agents=1), grid, policy, np.random.default_rng(0))
+    assert "photo n/a" in "\n".join(hud_lines(test_map, "random", 0, playback))
+    config = SimulationConfig(map_name="campus", n_agents=1)
+    campus = Simulation(config, grid, policy, np.random.default_rng(0))
+    assert "photo off" in "\n".join(hud_lines(campus, "random", 0, playback))
+    playback.toggle_photo()
+    assert "photo on" in "\n".join(hud_lines(campus, "random", 0, playback))

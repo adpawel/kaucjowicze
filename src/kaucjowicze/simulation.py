@@ -12,8 +12,8 @@ from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
     distance_map,
     first_step_to_nearest_can,
+    seen_cans,
     step_closer,
-    visible_cans,
     within_radius,
 )
 from kaucjowicze.policies import MovementPolicy
@@ -74,7 +74,7 @@ class Simulation:
             self.grid.take_can(agent.pos)
             agent.bag += 1
             agent.steps_without_can = 0
-            agent.source_cans = visible_cans(self.grid, agent.pos, self.config.vision_radius)
+            agent.source_cans = seen_cans(self.grid, agent.pos, self.config.vision_radius)
             self._remember_source(agent)
             if agent.bag >= self.config.bag_capacity:
                 agent.state = AgentState.CARRYING

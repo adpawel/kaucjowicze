@@ -67,6 +67,7 @@ def test_columns_follow_the_documented_format():
         "algorithm",
         "reward",
         "scenario",
+        "map",
         "n_agents",
         "k",
         "rho",
@@ -237,3 +238,11 @@ def test_experiments_work_without_the_analysis_libraries(tmp_path):
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_maps_have_separate_default_directories(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2"])
+    main(["--seeds", "1", "--max-steps", "2", "--map", "campus"])
+    assert (tmp_path / "results" / "test" / "runs.csv").exists()
+    assert (tmp_path / "results" / "campus" / "runs.csv").exists()

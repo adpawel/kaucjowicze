@@ -177,3 +177,14 @@ def test_simulation_shows_the_policy_where_the_agents_are():
         sim.step()
         moved_along_trail += sim.agents[0].pos == DIAGONAL
     assert moved_along_trail < 25
+
+
+def test_a_wall_hides_the_crowd_behind_it():
+    config = SimulationConfig(crowd_radius=3, crowd_penalty=0.0)
+    grid = Grid(30, 11)
+    grid.add_obstacle(12, 0, 1, 11)  # splits the window ahead of the agent
+    grid.add_can((15, 5))
+    pheromone = np.zeros((11, 30))
+    policy = AcoPolicy(config, pheromone, np.zeros((11, 30), dtype=np.int32))
+    crowd = [Agent(i, (15, 3 + i)) for i in range(3)]  # behind the wall, more agents than cans
+    assert not policy._is_crowded((10, 5), (11, 5), grid, crowd)

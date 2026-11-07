@@ -47,7 +47,7 @@ gdzie n (`source_cans`) to liczba puszek w oknie o promieniu r wokół agenta, p
 | Znakujemy komórkę opuszczaną, a nie tę, na którą agent wchodzi | Ślad obejmuje samo źródło i nie obejmuje bazy, na której jest niepotrzebny |
 | n zerujemy po oddaniu puszek | Następny kurs nie dziedziczy siły śladu z poprzedniego |
 
-**Uproszczenie:** n to zwykła suma w oknie, więc liczy też puszki za cienką ścianą, których agent nie zobaczyłby przy szukaniu (`first_step_to_nearest_can`). Na mapie testowej nie ma to znaczenia, bo budynki są grubsze niż r = 2. Trzeba do tego wrócić przy prawdziwej mapie MS AGH.
+n liczy tylko puszki, do których da się dojść bez wychodzenia poza okno (`seen_cans`), czyli te same, które agent widzi przy szukaniu (`first_step_to_nearest_can`). Pierwotnie była to zwykła suma w oknie, licząca też puszki za cienką ścianą. Na mapie testowej obie wersje dają identyczne przebiegi, a na mapie kampusu różnią się przy około 3% podniesień (punkt 13).
 
 ## 3. Parowanie
 
@@ -155,7 +155,7 @@ Te wyniki to głównie zmienność między przebiegami, a nie słabość ACO na 
 a = c + (R + 1) · v      promień R
 ```
 
-W oknie liczymy puszki C oraz agentów w stanie `SEARCHING` S. Kierunek jest zatłoczony, gdy `C > 0` i `S > C`. Wtedy w punkcie 4 zamiast τ_out(n) używamy:
+W oknie liczymy puszki C oraz agentów w stanie `SEARCHING` S, ale tylko na komórkach, do których da się dojść od n bez wychodzenia poza okno (n zawsze leży na jego brzegu). Kierunek jest zatłoczony, gdy `C > 0` i `S > C`. Wtedy w punkcie 4 zamiast τ_out(n) używamy:
 
 ```
 τ_out(n) ← λ · τ_out(n)
@@ -174,7 +174,7 @@ Kara działa przed progiem z kroku 2, więc przy λ = 0 agent, któremu zostały
 | R = 3 | Równe `cluster_spread`, czyli odchyleniu standardowemu skupiska. Wartość dobrana ad hoc: pomiar w punkcie 10 nie odróżnia R = 2, 3 i 5 |
 | λ = 0 | Ślady sięgają kilkudziesięciu jednostek (szczyt 11–29 na ziarnach 0–9), a τ₀ = 0.01, więc umiarkowana kara prawie nie zmienia wyboru. Przy τ = 20 i λ = 0.1 kierunek nadal dostaje około 97% wagi wśród 8 sąsiadów. Wartość też ad hoc: pomiar nie odróżnia λ = 0, 0.1 i 0.5 |
 
-**Uproszczenie:** tak jak w punkcie 2 okno nie uwzględnia ścian, a agent „widzi” tłok dalej niż puszki (do 2R + 1 = 7 komórek przy r = 2). Tłum widać z większej odległości niż puszkę, ale przy prawdziwej mapie MS AGH trzeba do tego wrócić.
+**Uproszczenie:** agent „widzi” tłok dalej niż puszki (do 2R + 1 = 7 komórek przy r = 2). Tłum widać z większej odległości niż puszkę. Ściana zasłania to, co jest za nią (punkt 13).
 
 ## 9. Nagroda indywidualna N2: pamięć prywatna
 
@@ -247,7 +247,7 @@ Metryki liczy `metrics.py`, a testy i przedziały ufności `plots.py`. Zapis met
 
 **Format CSV.** Kolumny są zgodne z `PLAN.md`, rozdział 7, z kolumną `reward` z `MILESTONES.md`. Dodatkowo:
 
-- `max_steps` jest potrzebne do przebiegów poniżej progu, a `initial_cans` i `steps` opisują przebieg,
+- `max_steps` jest potrzebne do przebiegów poniżej progu, a `map`, `initial_cans` i `steps` opisują przebieg,
 - `path_per_can`, `cans_min` i `cans_max` to metryki z `MILESTONES.md`, rozdział 4.
 
 Pozostają puste: `beta`, bo wybór kierunku nie ma heurystyki η (punkt 4), oraz `J`, bo wagi w₁, w₂ wariantu C nie są ustalone. `rho`, `alpha` i `eps` wypełniamy tylko dla N1, bo pozostałe warianty z nich nie korzystają. N2 ma w `algorithm` wartość `aco`, tak jak w `--algorithm aco --reward individual`, choć nie używa feromonu.
@@ -277,3 +277,82 @@ Pomiar z 6 listopada 2026: `python -m kaucjowicze.experiments --seeds 30`, warto
 - **P2: N2 dzieli puszki wyraźnie mniej równo** (Gini 0.555 wobec 0.398, różnica istotna). Ta hipoteza się potwierdza.
 - Sześć wykonanych testów nie zmienia tych wniosków: po korekcie Bonferroniego (próg 0.05 / 6 ≈ 0.0083) wyniki po obu stronach progu pozostają te same.
 - Trasa na puszkę jest w N1 średnio krótsza niż w N2 (110.2 ± 16.7 wobec 132.7 ± 14.4), ale przedziały się nakładają, a tej metryki nie testowaliśmy, więc to tylko wskazówka.
+
+## 13. Mapa Miasteczka
+
+Maskę `src/kaucjowicze/data/ms_agh_map.png` generuje z danych OpenStreetMap skrypt `tools/build_campus_map.py`. Jeden piksel to jedna komórka. Symulacja czyta tylko ten plik, więc maskę można poprawiać ręcznie, a dane OSM pobrane 7 listopada 2026 leżą w `data/ms_agh_osm.json`.
+
+**Obszar:** prostokąt 300 × 273 m, czyli 100 × 91 komórek po 3 m. Zakres wybrał zespół: strona Budryka z akademikami, wschodnia granica na linii Smoka Studenta, a pozostałe proste, z fragmentem ulicy na brzegach.
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Komórka 3 m | Szerokość mapy pozostaje taka jak na mapie testowej, a przejścia na Autostradzie MS AGH i między akademikami mają co najmniej jedną komórkę. Węższe przejścia mogły zniknąć. Wartość dobrana ad hoc |
+| Obrót o 13° względem północy | Tyle wynosi kierunek ścian akademików zmierzony z obrysów. Ściany leżą wzdłuż siatki, więc nie mają schodków, a prostokąt nie obejmuje budynków po drugiej stronie Reymonta |
+| Przeszkody: budynki oprócz `building=roof` i `building=bridge`, płoty, mury, mury oporowe, żywopłoty | Pod dachem i mostem można przejść. Pozostałe `barrier` (krawężniki, słupki) nie zatrzymują pieszego |
+| Można chodzić wszędzie poza przeszkodami, także po trawie | Tak zachowują się ludzie, a wyniki nie zależą od kompletności sieci chodników |
+| Budynek zajmuje komórkę pokrytą w co najmniej 50% | Obrysy nie są sztucznie pogrubiane, więc wąskie przejścia nie znikają |
+| Przeszkody liniowe rysujemy bez kroków po skosie | Agent może przejść po skosie między komórkami stykającymi się rogami (`free_neighbours`), więc linia po skosie byłaby dziurawa |
+| Chodnik przecinający płot lub żywopłot oraz brama z OSM tworzą przejście | Bramy często nie ma w danych, a chodnik przez płot oznacza, że da się tamtędy przejść. Czyścimy jedną komórkę wokół przecięcia wzdłuż chodnika. Brama z `locked=yes` albo `access=private` lub `no` nie tworzy przejścia, chyba że ma `foot=yes`, `designated` lub `permissive` |
+| Chodnik z `tunnel=building_passage` lub `tunnel=yes` przechodzi przez budynek, o ile nie ma ujemnego `layer` | Tak OSM opisuje przejścia, m.in. na Autostradzie MS AGH. Droga z ujemnym `layer` biegnie pod ziemią, więc nie otwiera tego, co nad nią. Jedyny taki chodnik w danych przecinał blok, którego dach na zdjęciu jest ciągły. Nie sprawdzaliśmy tego w terenie |
+| Obszary odcięte od głównej części mapy stają się przeszkodami (160 komórek) | Puszki w takim miejscu nigdy nie zostałyby zebrane. `load_mask` zgłasza błąd, gdy taki obszar powstanie po ręcznej poprawce |
+| Baza: komórka Autostrady MS AGH najbliższa środka mapy, (49, 36) | Odpowiada centralnej bazie z mapy testowej. Położenie jest umowne, bo nie ma tam prawdziwego punktu skupu |
+
+**Tło okna:** ortofotomapa z Geoportalu (usługa WMS GUGiK), obrócona i przycięta do tego samego prostokąta (`ms_agh_photo.jpg`). Jest tylko warstwą w oknie, więc nie wpływa na wyniki. Zdjęcie pokazuje dachy, a maska obrysy z OSM, więc mogą się nieznacznie rozjeżdżać.
+
+**Znane ograniczenia:** mapa odtwarza to, co jest w OSM, i nie była sprawdzana w terenie. Ogrodzone boiska i ogród przedszkola są dostępne, bo ich ogrodzenia mają przerwy lub bramy, więc puszki mogą pojawić się także tam.
+
+**Ściany a okna widzenia.** Przy cienkich przeszkodach zwykła suma w oknie liczyłaby to, co za nimi, dlatego n (punkt 2) i tłok (punkt 8) liczymy po komórkach połączonych wewnątrz okna. Na ziarnach 0–29 mapy kampusu n różni się od zwykłej sumy przy 3,2% podniesień w N1. Na mapie testowej wszystkie 90 przebiegów pozostaje bez zmian względem punktu 12, co sprawdziliśmy, porównując `runs.csv`.
+
+**Pozostałe parametry bez zmian.** Liczba agentów, puszek, skupisk, r, S, ρ, ε i α (poza układem puszek opisanym niżej) są takie same jak na mapie testowej, żeby wyniki dało się porównać. Mapa ma podobny udział wolnych komórek (77%), ale jest większa: 7019 wolnych komórek wobec 4600, a najdalsza komórka jest 80 kroków od bazy wobec 50. Ślad o sile 5 nadal spokojnie przeżywa drogę tam i z powrotem: po 160 krokach ma około 0.19, a τ₀ = 0.01. Nie stroiliśmy tych parametrów pod nową mapę. Dotyczy to też R = 3 i λ = 0: uzasadnienie R z punktu 8 („równe σ”) nie przenosi się na kampus, gdzie σ = 2, więc R = 1,5 σ, a wartości nie kalibrowaliśmy ponownie.
+
+**Układ puszek na kampusie.** Mapa testowa zachowuje układ z `MILESTONES.md`. Na kampusie 270 puszek tworzy 6 skupisk po 45, z σ = 2 komórki (6 m), a środek skupiska leży najwyżej 4 komórki (12 m, odległość Czebyszewa, parametr `cluster_dorm_distance`) od akademika, czyli budynku z `building=dormitory`. Akademiki mają w masce osobny, szary kolor.
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Środki przy akademikach | `PLAN.md`, 3.1, zakłada puszki głównie pod akademikami. Wcześniej środek mógł wypaść np. na środku boiska. Odległość 4 dobrana ad hoc |
+| σ = 2 zamiast 3 | Przy σ = 3 aż 67% puszek leżało pojedynczo w komórce, a skupisko wyglądało jak rozrzucone puszki. Przy σ = 2 około 80% skupiska mieści się w promieniu 11 m zamiast 16 m. Wybór oceniony wizualnie |
+| Bez puszek tła | **Odejście od `PLAN.md`, 3.1.** Pojedyncze puszki wydłużały koniec zbiórki, co na ziarnach kalibracyjnych 100–119 (N1, 20 przebiegów na układ) wyglądało tak: t₁₀₀ wynosi średnio 5530 przy 6×42 z 18 puszkami tła i 2751 przy 6×45 bez tła, a t₉₀ odpowiednio 2063 i 1907 |
+| Nadal 270 puszek i 6 skupisk | Mniejsze skupiska nie skróciły zbiórki (6×30: t₁₀₀ = 2907). Mniej skupisk skraca ją bardziej (4×45: 1629), ale zmniejsza też liczbę miejsc do odkrycia. To pomiar kalibracyjny bez testu istotności |
+
+Te wartości to założenia dobrane na podstawie wyglądu mapy i czasu trwania, a nie danych o prawdziwych puszkach.
+
+**Korekta: ziarna 0–29 nie były nietknięte.** Wcześniejsza wersja tego punktu twierdziła, że nie używaliśmy ich przy wyborze układu. To nieprawda: przed zmianą układu dwa razy policzyliśmy na nich P1 i P2, tabelę porównującą σ i puszki tła, a podgląd rozmieszczenia oglądaliśmy na ziarnach 0–3. Tylko ostatnie porównanie układów (powyżej) było na ziarnach 100–119. Dlatego główne wyniki w punkcie 14 pochodzą z ziaren 200–229, których wcześniej nie używaliśmy.
+
+**Limit T = 20000 na kampusie.** Przy T = 3000 i poprzednim układzie puszek żaden przebieg losowego spaceru nie osiągnął 90% puszek (0/30), a ACO tylko 11/30, więc t₉₀ opisywałoby głównie limit. Limit dobraliśmy na osobnych ziarnach 100–109 przy T = 20000. Przy obecnym układzie zostawiamy go bez zmian: ACO kończy się znacznie wcześniej, a losowy spacer wciąż go czasem osiąga (punkt 14). Mapa testowa zachowuje T = 3000.
+
+## 14. Porównania P1 i P2 na mapie Miasteczka
+
+Pomiar z 7 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus`, ziarna 200–229, T = 20000, układ puszek z punktu 13. Te ziarna nie brały udziału w żadnej wcześniejszej decyzji. Średnia ± 95%.
+
+| Wariant | t₅₀ | t₉₀ | Trasa na puszkę | Kursy | Gini | Min / max puszek na agenta | Osiągnęło 90% | Pełna zbiórka |
+|---|---|---|---|---|---|---|---|---|
+| losowy spacer | 1267 ± 221 | 7257 ± 1588 | 921.0 ± 154.7 | 33 ± 2 | 0.407 ± 0.023 | 0.1 / 35.6 | 29/30 | 25/30 |
+| ACO N1 | 468 ± 85 | 2439 ± 559 | 214.3 ± 40.4 | 34 ± 1 | 0.516 ± 0.027 | 0.1 / 46.2 | 30/30 | 30/30 |
+| N2 | 538 ± 95 | 2360 ± 471 | 258.9 ± 42.3 | 33 ± 2 | 0.689 ± 0.027 | 0.1 / 69.2 | 30/30 | 30/30 |
+
+| Porównanie | p dla t₉₀ | p dla Giniego |
+|---|---|---|
+| ACO N1 / losowy spacer | 9.8 · 10⁻⁸ | 3.3 · 10⁻⁷ |
+| ACO N1 / N2 | 1.0 | 7.4 · 10⁻¹⁰ |
+| N2 / losowy spacer | 5.8 · 10⁻⁸ | 3.0 · 10⁻¹¹ |
+
+**Wnioski:**
+
+- **P1 potwierdza się na układzie budynków Miasteczka.** t₉₀ ACO jest około 3 razy krótsze niż w losowym spacerze, a różnica jest istotna także po korekcie Bonferroniego (próg 0.0083). ACO wygrało na 28 z 30 map.
+- **ACO dzieli puszki mniej równo niż losowy spacer** (Gini 0.516 wobec 0.407, różnica istotna także po korekcie). Na mapie testowej tej różnicy nie było (p = 0.26). Szybsza zbiórka idzie więc w parze z tym, że część agentów zbiera wyraźnie więcej.
+- **P2: nie ma dowodu, że N1 jest szybsze od N2** (p ≈ 1, t₉₀ 2439 wobec 2360, N1 szybsze na 17 z 30 map). Brak istotnej różnicy nie oznacza, że warianty są równe. N2 dzieli puszki wyraźnie mniej równo (Gini 0.689 wobec 0.516).
+- **Trasa na puszkę jest w N1 średnio krótsza niż w N2** (214.3 ± 40.4 wobec 258.9 ± 42.3), ale przedziały się nakładają, a tej metryki nie testowaliśmy, więc to tylko wskazówka.
+- **Trasy na puszkę nie należy porównywać między mapami.** Liczy ona też ruchy po ostatnim oddaniu, a przebiegi mają różną długość i inny limit T.
+
+### Kontrola: te same wnioski na innych ziarnach i układach
+
+| Pomiar | t₉₀ losowy / N1 / N2 | p dla t₉₀: N1 / losowy | p dla t₉₀: N1 / N2 | Gini losowy / N1 / N2 | p dla Giniego: N1 / losowy |
+|---|---|---|---|---|---|
+| ziarna 200–229 (wyniki główne) | 7257 / 2439 / 2360 | 9.8 · 10⁻⁸ | 1.0 | 0.407 / 0.516 / 0.689 | 3.3 · 10⁻⁷ |
+| ziarna 0–29, ta sama maska | 6133 / 2204 / 2785 | 3.3 · 10⁻⁷ | 0.26 | 0.404 / 0.482 / 0.690 | 0.0003 |
+| ziarna 0–29, maska przed usunięciem podziemnego przejścia | 5672 / 2455 / 2088 | 2.7 · 10⁻⁶ | 0.47 | 0.416 / 0.484 / 0.682 | 0.0024 |
+| ziarna 0–29, poprzedni układ puszek (6 × 40 + 30 puszek tła, σ = 3, środki w dowolnym miejscu) | 8928 / 3859 / 4513 | 4.8 · 10⁻⁷ | 0.65 | 0.404 / 0.438 / 0.614 | 0.064 |
+
+- **Wnioski o szybkości nie zależą od tych zmian.** We wszystkich pomiarach ACO i N2 są istotnie szybsze od losowego spaceru, a między N1 i N2 nie ma istotnej różnicy.
+- **Pojedynczy przebieg jest bardzo czuły na drobne zmiany.** Zamknięcie 5 komórek zmieniło średnie t₉₀ N1 na tych samych ziarnach z 2455 na 2204. Różnica mieści się w przedziale ufności (± 559), więc różnic tego rzędu nie należy interpretować.
+- **Wniosek o Ginim N1 względem losowego spaceru zależy od układu puszek.** Przy skupiskach przy akademikach różnica jest istotna, a przy poprzednim, bardziej rozproszonym układzie nie była. Mierzymy go więc dla przyjętego założenia, a nie jako ogólną własność ACO.
