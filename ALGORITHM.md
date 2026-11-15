@@ -456,7 +456,7 @@ W tym pomiarze każda impreza została ruszona i osiągnęła 50%, więc żadna 
 1. t₉₀ maleje z N we wszystkich wariantach, a nakład w ACO zaczyna rosnąć przy mniejszym N niż w losowym spacerze, bo ślad ściąga agentów do tych samych skupisk.
 2. Przewaga ACO jest mała przy N = 5 (mało śladu), największa przy średnich N i słabnie przy N = 80 (gęsto rozstawieni agenci znajdują skupiska nawet bez śladu).
 
-**Kod:** `--n-agents` w `experiments.py` przyjmuje kilka wartości i zapisuje wszystkie przebiegi do jednego katalogu (`results/<mapa>_agents`). Do tego katalogu trafia też pojedyncza wartość inna niż domyślna, żeby nie nadpisać pomiaru z punktu 14. Raport P5 podaje mapę i scenariusz, bo w scenariuszu dynamicznym t₉₀ liczy też puszki z imprez. Gdy w danych jest więcej niż jedno N, `plots.py` robi tylko raport P5, bo P1, P2 i P4 mieszałyby przebiegi różnej wielkości.
+**Kod:** `--n-agents` w `experiments.py` przyjmuje kilka wartości i zapisuje wszystkie przebiegi do jednego katalogu: `results/<mapa>_agents`, a w scenariuszu dynamicznym `results/<mapa>_dynamic_agents`. Do tego katalogu trafia też pojedyncza wartość inna niż domyślna, żeby nie nadpisać pomiaru z punktu 14. Raport P5 podaje mapę i scenariusz, bo w scenariuszu dynamicznym t₉₀ liczy też puszki z imprez. Gdy w danych jest więcej niż jedno N, `plots.py` robi tylko raport P5, bo P1, P2 i P4 mieszałyby przebiegi różnej wielkości.
 
 ### Wyniki
 
