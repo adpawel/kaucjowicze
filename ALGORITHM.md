@@ -436,3 +436,65 @@ W tym pomiarze każda impreza została ruszona i osiągnęła 50%, więc żadna 
 - **N1 rozkłada imprezę na więcej agentów niż N2** (3.6 wobec 2.4, p = 2.5 · 10⁻⁸). Ślad ściąga do imprezy innych, a w N2 skupisko zbiera ten, kto je znalazł. Ten test nie był zaplanowany przed pomiarem, więc to tylko wskazówka. Losowy spacer ma najwięcej agentów na imprezę, bo jego imprezy leżą długo i trafia na nie wielu przypadkowych agentów.
 - **N1 jest bardziej przewidywalne niż N2.** Przedział N2 jest dwa razy szerszy, a średnia N2 skacze między imprezami (382–980 kroków), podczas gdy N1 przyspiesza z każdą imprezą (620, 531, 440). Prawdopodobnie zależy to od tego, czy impreza leży blisko zapamiętanego źródła agenta N2, ale tego nie mierzyliśmy.
 - **Wniosek z punktu 14 przenosi się na scenariusz dynamiczny:** N1 i N2 zbierają całość równie szybko, a N2 dzieli puszki mniej równo (Gini 0.686 wobec 0.520).
+
+## 16. Liczba agentów (P5)
+
+**Pytanie:** jak liczba agentów N wpływa na tempo zbiórki i czy przewaga ACO zależy od N. Slajd 8 prezentacji z zajęć 2 i `MILESTONES.md` (Część II) zapowiadały analizę wrażliwości na N. Zmieniamy tylko N, a pozostałe parametry (ρ, α, ε, k, r) zostawiamy na później.
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| Mapa, scenariusz | Miasteczko, statyczny | Jedna zmienna naraz. Scenariusz dynamiczny dodałby drugi wymiar |
+| N | 5, 10, 20, 40, 80 | Kolejne wartości to podwojenia, więc 5 punktów pokrywa 16-krotny zakres. N = 20 to wartość domyślna |
+| Warianty, ziarna, T | te same co w punkcie 14: trzy warianty, ziarna 200–229, T = 20000 | Przy N = 20 przebiegi muszą być identyczne z punktem 14 (kontrola) |
+| Nakład pracy | `N · t₉₀`, czyli kroki agentów do zebrania 90% puszek | Jeśli rośnie razem z N, każdy kolejny agent daje mniej, czyli tłok szkodzi |
+| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich oraz liczba ziaren, na których N1 jest szybsze. Obie wartości liczymy tylko na ziarnach, które przeszły oba warianty | Stosunek i liczba ziaren opisują wtedy tę samą próbkę. W pomiarze każde ziarno ma oba warianty, więc wynik jest taki sam jak ze wszystkich przebiegów |
+| Testy | tylko t₉₀ ACO N1 / losowy spacer, osobno dla każdego N, Mann-Whitney dwustronny, Bonferroni na 5 testów (próg 0.01) | Mało testów, wybranych przed pomiarem. N2 i Gini podajemy tylko opisowo |
+
+**Hipotezy:**
+1. t₉₀ maleje z N we wszystkich wariantach, a nakład w ACO zaczyna rosnąć przy mniejszym N niż w losowym spacerze, bo ślad ściąga agentów do tych samych skupisk.
+2. Przewaga ACO jest mała przy N = 5 (mało śladu), największa przy średnich N i słabnie przy N = 80 (gęsto rozstawieni agenci znajdują skupiska nawet bez śladu).
+
+**Kod:** `--n-agents` w `experiments.py` przyjmuje kilka wartości i zapisuje wszystkie przebiegi do jednego katalogu: `results/<mapa>_agents`, a w scenariuszu dynamicznym `results/<mapa>_dynamic_agents`. Do tego katalogu trafia też pojedyncza wartość inna niż domyślna, żeby nie nadpisać pomiaru z punktu 14. Raport P5 podaje mapę i scenariusz, bo w scenariuszu dynamicznym t₉₀ liczy też puszki z imprez. Gdy w danych jest więcej niż jedno N, `plots.py` robi tylko raport P5, bo P1, P2 i P4 mieszałyby przebiegi różnej wielkości.
+
+### Wyniki
+
+Pomiar z 15 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --n-agents 5 10 20 40 80`, 450 przebiegów. Średnia ± 95%. Przebieg poniżej 90% liczy się jako T.
+
+| N | Wariant | t₉₀ | Nakład N · t₉₀ | Gini | Osiągnęło 90% |
+|---|---|---|---|---|---|
+| 5 | losowy spacer | 18283 ± 1392 | 91414 ± 6959 | 0.222 ± 0.032 | 7/30 |
+| 5 | ACO N1 | 9773 ± 2149 | 48866 ± 10743 | 0.311 ± 0.031 | 27/30 |
+| 5 | N2 | 8922 ± 2108 | 44608 ± 10542 | 0.381 ± 0.044 | 27/30 |
+| 10 | losowy spacer | 13215 ± 2095 | 132149 ± 20946 | 0.318 ± 0.030 | 22/30 |
+| 10 | ACO N1 | 3594 ± 905 | 35939 ± 9052 | 0.408 ± 0.034 | 30/30 |
+| 10 | N2 | 4119 ± 1148 | 41192 ± 11484 | 0.539 ± 0.038 | 30/30 |
+| 20 | losowy spacer | 7257 ± 1588 | 145141 ± 31767 | 0.407 ± 0.023 | 29/30 |
+| 20 | ACO N1 | 2439 ± 559 | 48786 ± 11172 | 0.516 ± 0.027 | 30/30 |
+| 20 | N2 | 2360 ± 471 | 47204 ± 9413 | 0.689 ± 0.027 | 30/30 |
+| 40 | losowy spacer | 3841 ± 767 | 153653 ± 30671 | 0.561 ± 0.018 | 30/30 |
+| 40 | ACO N1 | 1184 ± 311 | 47359 ± 12426 | 0.620 ± 0.025 | 30/30 |
+| 40 | N2 | 1423 ± 306 | 56917 ± 12247 | 0.782 ± 0.019 | 30/30 |
+| 80 | losowy spacer | 1709 ± 238 | 136739 ± 19016 | 0.720 ± 0.011 | 30/30 |
+| 80 | ACO N1 | 750 ± 164 | 59992 ± 13100 | 0.731 ± 0.015 | 30/30 |
+| 80 | N2 | 864 ± 122 | 69083 ± 9742 | 0.869 ± 0.014 | 30/30 |
+
+| N | t₉₀ losowy / t₉₀ ACO N1 | N1 szybsze na | p (t₉₀, N1 / losowy) | Istotne po korekcie |
+|---|---|---|---|---|
+| 5 | 1.87 | 26/30 | 9.5 · 10⁻⁸ | tak |
+| 10 | 3.68 | 29/30 | 6.3 · 10⁻⁹ | tak |
+| 20 | 2.98 | 28/30 | 9.8 · 10⁻⁸ | tak |
+| 40 | 3.24 | 30/30 | 4.3 · 10⁻⁸ | tak |
+| 80 | 2.28 | 26/30 | 3.0 · 10⁻⁷ | tak |
+
+**Kontrola:** 90 przebiegów z N = 20 ma we wszystkich kolumnach te same wartości co pomiar z punktu 14.
+
+**Wnioski:**
+
+- **ACO N1 jest istotnie szybsze od losowego spaceru przy każdym N** od 5 do 80, także po korekcie Bonferroniego.
+- **Hipoteza 1 potwierdza się tylko częściowo.** t₉₀ maleje z N we wszystkich wariantach. Nakład w ACO N1 jest prawie stały od 5 do 40 agentów (36–49 tys. kroków), więc w tym zakresie każdy dodatkowy agent pracuje mniej więcej tak samo wydajnie. Przy N = 80 nakład rośnie do 60 tys. w N1 i 69 tys. w N2, co pasuje do tłoku, ale przedziały z N = 20 i 40 się nakładają, a tego nie testowaliśmy, więc to tylko wskazówka. W losowym spacerze nakład też nie spada (132–154 tys. od N = 10), więc nie widać, żeby tłok zaczynał szkodzić wcześniej w ACO niż bez śladu.
+- **Hipoteza 2 pasuje do kształtu wyników, ale go nie dowodzi.** Przewaga ACO wynosi 1.9 przy N = 5, 3–3.7 przy N = 10–40 i 2.3 przy N = 80. Nie testowaliśmy, czy te stosunki różnią się istotnie między sobą.
+- **Przy N = 5 przewaga ACO jest zaniżona.** Losowy spacer osiągnął 90% tylko w 7 z 30 przebiegów, a pozostałe liczymy jako T = 20000, chociaż prawdziwe t₉₀ jest większe. Z tego samego powodu zaniżony jest nakład losowego spaceru przy N = 5 (91 tys.), więc tego punktu nie należy czytać jako „mało agentów pracuje wydajniej”.
+- **N1 i N2 są równie szybkie przy każdym N** (przedziały t₉₀ się nakładają), tak jak w punkcie 14. Przy N ≥ 40 nakład N2 jest wyższy niż N1, ale tego nie testowaliśmy.
+- **Gini rośnie z N we wszystkich wariantach**, a N2 dzieli najmniej równo przy każdym N. Wzrostu z N nie należy czytać jako „więcej agentów to mniej sprawiedliwie”: przy N = 80 na agenta przypada średnio 3.4 puszki, więc nierówność wynika w dużej części z tego, że puszek jest mało w stosunku do liczby agentów. Ginich dla różnych N nie porównujemy.

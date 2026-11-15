@@ -7,19 +7,24 @@ pytest.importorskip("matplotlib")
 pytest.importorskip("scipy")
 
 from kaucjowicze.config import SimulationConfig  # noqa: E402
-from kaucjowicze.experiments import run_experiment, write_tables  # noqa: E402
+from kaucjowicze.experiments import run_agent_counts, run_experiment, write_tables  # noqa: E402
 from kaucjowicze.plots import (  # noqa: E402
     Results,
     _percent,
     _with_ci,
+    aco_advantage,
+    agent_sweep_significance,
+    agent_sweep_table,
     censored,
     collection_curves,
     curve_band,
     format_summary,
+    has_agent_sweep,
     load_results,
     main,
     mean_ci,
     party_latencies,
+    report_text,
     significance_table,
     summary_table,
     write_report,
@@ -332,3 +337,111 @@ def test_results_without_party_file_still_load(result_dir, tmp_path):
     results = load_results(tmp_path)
     assert results.events is None
     write_report(results, tmp_path / "figures")
+
+
+def _sweep(rows: list[dict]) -> pd.DataFrame:
+    """Runs of the agent sweep: `t_90` given per (N, variant, seed)."""
+    return _runs([{"run_id": i, **row} for i, row in enumerate(rows)])
+
+
+def test_agent_sweep_table_has_a_row_per_count_and_variant():
+    runs = _sweep(
+        [
+            {"n_agents": n, "variant": v, "seed": s, "t_90": t}
+            for n, times in ((10, (40.0, 60.0)), (5, (80.0, None)))
+            for v in ("aco/shared", "random")
+            for s, t in enumerate(times)
+        ]
+    )
+    table = agent_sweep_table(runs)
+
+    assert list(zip(table["n_agents"], table["variant"], strict=True)) == [
+        (5, "random"),
+        (5, "aco/shared"),
+        (10, "random"),
+        (10, "aco/shared"),
+    ]
+    five = table.iloc[0]
+    assert five["t_90_mean"] == pytest.approx((80 + 100) / 2)  # unreached counts as T = 100
+    assert five["work_mean"] == pytest.approx(5 * 90)
+    assert five["t_90_reached"] == 1
+
+
+def test_aco_advantage_pairs_seeds():
+    runs = _sweep(
+        [
+            {"n_agents": 5, "variant": "random", "seed": 0, "t_90": 90.0},
+            {"n_agents": 5, "variant": "random", "seed": 1, "t_90": 30.0},
+            {"n_agents": 5, "variant": "aco/shared", "seed": 0, "t_90": 30.0},
+            {"n_agents": 5, "variant": "aco/shared", "seed": 1, "t_90": 50.0},
+        ]
+    )
+    (row,) = aco_advantage(runs).to_dict("records")
+    assert row["ratio"] == pytest.approx(60 / 40)
+    assert (row["aco_faster"], row["seeds"]) == (1, 2)
+
+
+def test_agent_sweep_tests_each_count_with_bonferroni():
+    rows = []
+    for n in (5, 10):
+        rows += [
+            {"n_agents": n, "variant": "aco/shared", "seed": s, "t_90": 10.0 + s} for s in range(8)
+        ]
+        rows += [
+            {"n_agents": n, "variant": "random", "seed": s, "t_90": 50.0 + s} for s in range(8)
+        ]
+    table = agent_sweep_significance(_sweep(rows))
+
+    assert table["n_agents"].tolist() == [5, 10]
+    assert (table["threshold"] == 0.025).all()
+    assert table["significant"].all()
+
+
+@pytest.fixture(scope="module")
+def sweep_dir(tmp_path_factory):
+    config = SimulationConfig(
+        width=30, height=20, n_clusters=2, cans_per_cluster=5, n_background_cans=2, max_steps=150
+    )
+    output = tmp_path_factory.mktemp("sweep")
+    write_tables(run_agent_counts(seeds=[0, 1, 2], counts=[2, 4], config=config), output)
+    return output
+
+
+def test_sweep_report_replaces_the_other_comparisons(sweep_dir, result_dir, tmp_path):
+    results = load_results(sweep_dir)
+    assert has_agent_sweep(results)
+    assert not has_agent_sweep(load_results(result_dir))
+
+    names = {path.name for path in write_report(results, tmp_path)}
+
+    assert names == {
+        "p5_t90_vs_agents.png",
+        "p5_work_vs_agents.png",
+        "p5_aco_advantage.png",
+        "summary.md",
+    }
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert summary.startswith("# Number of agents (P5)")
+    assert "Bonferroni" in summary
+    assert "# Summary" not in summary
+
+
+def test_aco_advantage_uses_only_seeds_both_variants_ran_on():
+    runs = _sweep(
+        [
+            {"n_agents": 5, "variant": "random", "seed": 0, "t_90": 60.0},
+            {"n_agents": 5, "variant": "random", "seed": 1, "t_90": 90.0},
+            {"n_agents": 5, "variant": "aco/shared", "seed": 0, "t_90": 30.0},
+        ]
+    )
+    (row,) = aco_advantage(runs).to_dict("records")
+    assert row["ratio"] == pytest.approx(60 / 30)  # seed 1 has no ACO run, so it is left out
+    assert (row["aco_faster"], row["seeds"]) == (1, 1)
+
+
+def test_sweep_summary_names_the_scenario(sweep_dir):
+    summary = report_text(load_results(sweep_dir))
+    assert "Map: test. Scenario: static." in summary
+    advantage = summary.split("## Advantage")[1]
+    assert "| 2 | " in advantage and "| 4 | " in advantage  # counts stay integers
+    assert ".0/" not in advantage

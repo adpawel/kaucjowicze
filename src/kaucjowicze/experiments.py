@@ -1,13 +1,14 @@
 """Run every variant on a shared list of seeds and save the measurements to CSV files.
 
 `python -m kaucjowicze.experiments` writes `runs.csv`, `timeline.csv`, `agents.csv` and
-`events.csv` (parties of the dynamic scenario; only a header in the static one).
+`events.csv` (parties of the dynamic scenario; only a header in the static one). With several
+`--n-agents` values every count runs on the same seeds and the files hold all of them (P5).
 """
 
 import argparse
 import csv
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from kaucjowicze.config import MAPS, SCENARIOS, STATIC, SimulationConfig
@@ -129,15 +130,20 @@ def run_experiment(
     config: SimulationConfig | None = None,
     variants: Sequence[Variant] = VARIANTS,
     progress: Callable[[int, int, str], None] | None = None,
+    first_run_id: int = 0,
 ) -> ExperimentTables:
-    """Run each variant on each seed. `progress` gets (runs done, all runs, finished run)."""
+    """Run each variant on each seed. `progress` gets (runs done, all runs, finished run).
+
+    Run ids start at `first_run_id`, so tables of several calls can be joined.
+    """
     config = config or SimulationConfig()
     seeds = list(seeds)
     # ACO without a reward runs the shared one, so that is what the results have to say
     variants = [(a, SHARED if a == "aco" and r is None else r) for a, r in variants]
     total = len(seeds) * len(variants)
     tables = ExperimentTables([], [], [], [])
-    for run_id, (seed, variant) in enumerate((s, v) for s in seeds for v in variants):
+    pairs = ((s, v) for s in seeds for v in variants)
+    for run_id, (seed, variant) in enumerate(pairs, start=first_run_id):
         algorithm, reward = variant
         record = record_run(build_simulation(algorithm, seed, reward, config))
         tables.runs.append(_run_row(run_id, seed, variant, config, record))
@@ -180,7 +186,40 @@ def run_experiment(
             for event in record.events
         )
         if progress is not None:
-            progress(run_id + 1, total, f"{_variant_label(variant)}, seed {seed}")
+            done = run_id - first_run_id + 1
+            progress(done, total, f"{_variant_label(variant)}, seed {seed}")
+    return tables
+
+
+def run_agent_counts(
+    seeds: Iterable[int],
+    counts: Sequence[int],
+    config: SimulationConfig | None = None,
+    variants: Sequence[Variant] = VARIANTS,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> ExperimentTables:
+    """Run the experiment once per number of agents, on the same seeds, in one set of tables."""
+    config = config or SimulationConfig()
+    seeds = list(seeds)
+    total = len(counts) * len(seeds) * len(variants)
+    tables = ExperimentTables([], [], [], [])
+    for count in counts:
+        first = len(tables.runs)
+
+        def report(done: int, _: int, label: str, count: int = count, first: int = first) -> None:
+            progress(first + done, total, f"N = {count}, {label}")
+
+        part = run_experiment(
+            seeds,
+            replace(config, n_agents=count),
+            variants,
+            report if progress is not None else None,
+            first_run_id=first,
+        )
+        tables.runs.extend(part.runs)
+        tables.timeline.extend(part.timeline)
+        tables.agents.extend(part.agents)
+        tables.events.extend(part.events)
     return tables
 
 
@@ -213,16 +252,28 @@ def main(argv: list[str] | None = None) -> None:
         "--scenario", choices=SCENARIOS, default=STATIC, help="static cans or parties during a run"
     )
     parser.add_argument(
+        "--n-agents",
+        type=int,
+        nargs="+",
+        default=[defaults.n_agents],
+        help="number of agents; several values run each of them (default: %(default)s)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="output directory (default: results/<map>, results/<map>_dynamic for parties)",
+        help="output directory (default: results/<map>, with _dynamic for parties and _agents "
+        "for --n-agents other than the default)",
     )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
         parser.error("--seeds must be positive")
     if args.max_steps is not None and args.max_steps <= 0:
         parser.error("--max-steps must be positive")
+    if min(args.n_agents) <= 0:
+        parser.error("--n-agents must be positive")
+    if len(set(args.n_agents)) != len(args.n_agents):
+        parser.error("--n-agents must not repeat a value")
 
     def report(done: int, total: int, label: str) -> None:
         print(f"[{done}/{total}] {label}", flush=True)
@@ -235,8 +286,11 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(error))
     seeds = range(args.first_seed, args.first_seed + args.seeds)
     folder = args.map if args.scenario == STATIC else f"{args.map}_{args.scenario}"
+    # Any other count gets its own directory, so it never replaces the measurement at the default
+    if args.n_agents != [defaults.n_agents]:
+        folder += "_agents"
     output = args.output or Path("results") / folder
-    write_tables(run_experiment(seeds, config, progress=report), output)
+    write_tables(run_agent_counts(seeds, args.n_agents, config, progress=report), output)
     print(f"Results written to {output}")
 
 

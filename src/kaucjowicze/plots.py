@@ -1,6 +1,8 @@
-"""Figures and summary tables of comparisons P1, P2 and P4, made from experiment CSV files.
+"""Figures and summary tables of comparisons P1, P2, P4 and P5, made from experiment CSV files.
 
-P4 compares how fast the variants take up the cans of parties in the dynamic scenario.
+P4 compares how fast the variants take up the cans of parties in the dynamic scenario. P5 runs
+the variants with several numbers of agents and replaces the other comparisons, which would
+otherwise mix runs of different sizes.
 
 `python -m kaucjowicze.plots` needs the optional `analysis` dependencies.
 """
@@ -39,6 +41,9 @@ TESTED_PAIRS = (
     (ACO_SHARED, ACO_INDIVIDUAL),
     (ACO_INDIVIDUAL, RANDOM),
 )
+# P5 tests only this pair, once per number of agents, as decided before the measurement
+P5_PAIR = (ACO_SHARED, RANDOM)
+SIGNIFICANCE_LEVEL = 0.05
 
 
 @dataclass(frozen=True)
@@ -217,6 +222,79 @@ def party_significance(results: Results) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])
 
 
+def has_agent_sweep(results: Results) -> bool:
+    """Whether the runs come with more than one number of agents (comparison P5)."""
+    return results.runs["n_agents"].nunique() > 1
+
+
+def agent_sweep_table(runs: pd.DataFrame) -> pd.DataFrame:
+    """One row per number of agents and variant.
+
+    `work` is N · t_90, the agent-steps spent until 90% of the cans are delivered: if it grows
+    with N, each extra agent adds less than the ones before.
+    """
+    rows = []
+    for n_agents in sorted(runs["n_agents"].unique()):
+        same_n = runs[runs["n_agents"] == n_agents]
+        for variant in _present(same_n, VARIANT_ORDER):
+            group = same_n[same_n["variant"] == variant]
+            t_90 = censored(group, "t_90")
+            row: dict[str, object] = {"n_agents": int(n_agents), "variant": variant}
+            row["runs"] = len(group)
+            row["t_90_mean"], row["t_90_ci"] = mean_ci(t_90)
+            row["work_mean"], row["work_ci"] = mean_ci(t_90 * n_agents)
+            row["gini_mean"], row["gini_ci"] = mean_ci(group["gini"])
+            row["t_90_reached"] = int(group["t_90"].notna().sum())
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def aco_advantage(runs: pd.DataFrame) -> pd.DataFrame:
+    """Per number of agents: mean t_90 of the random walk over that of ACO N1, and on how many
+    seeds ACO N1 is faster. Both use only the seeds that both variants ran on.
+    """
+    faster, slower = P5_PAIR
+    rows = []
+    for n_agents in sorted(runs["n_agents"].unique()):
+        same_n = runs[runs["n_agents"] == n_agents]
+        by_seed = {}
+        for variant in (slower, faster):
+            group = same_n[same_n["variant"] == variant]
+            by_seed[variant] = censored(group, "t_90").set_axis(group["seed"])
+        if by_seed[slower].empty or by_seed[faster].empty:
+            continue
+        paired = pd.concat(by_seed, axis=1, join="inner")
+        rows.append(
+            {
+                "n_agents": int(n_agents),
+                "ratio": paired[slower].mean() / paired[faster].mean(),
+                "aco_faster": int((paired[faster] < paired[slower]).sum()),
+                "seeds": len(paired),
+            }
+        )
+    return pd.DataFrame(rows, columns=["n_agents", "ratio", "aco_faster", "seeds"])
+
+
+def agent_sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
+    """Two-sided Mann-Whitney test of t_90, ACO N1 vs random walk, for each number of agents,
+    with the Bonferroni threshold over those tests.
+    """
+    variant_a, variant_b = P5_PAIR
+    rows = []
+    for n_agents in sorted(runs["n_agents"].unique()):
+        same_n = runs[runs["n_agents"] == n_agents]
+        a = same_n[same_n["variant"] == variant_a]
+        b = same_n[same_n["variant"] == variant_b]
+        if a.empty or b.empty:
+            continue
+        p_value = _mann_whitney_p(censored(a, "t_90"), censored(b, "t_90"))
+        rows.append({"n_agents": int(n_agents), "p_value": p_value})
+    table = pd.DataFrame(rows, columns=["n_agents", "p_value"])
+    table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
+    table["significant"] = table["p_value"] < table["threshold"]
+    return table
+
+
 def _style_axes(figure: Figure, title: str, xlabel: str, ylabel: str):
     axes = figure.add_subplot()
     axes.set_title(title, color=TEXT_PRIMARY, loc="left", fontsize=12)
@@ -281,6 +359,47 @@ def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path
     figure.savefig(path, dpi=150)
 
 
+def _agent_axis(axes, counts: Sequence[int]) -> None:
+    axes.set_xscale("log", base=2)
+    axes.set_xticks(counts, [str(count) for count in counts])
+    axes.minorticks_off()
+
+
+def plot_against_agents(
+    runs: pd.DataFrame, column: str, title: str, ylabel: str, path: Path
+) -> None:
+    """Mean of `column` from `agent_sweep_table` for each variant, with its 95% band."""
+    table = agent_sweep_table(runs)
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Number of agents N", ylabel)
+    for variant in _present(table, VARIANT_ORDER):
+        rows = table[table["variant"] == variant]
+        mean, half_width = rows[f"{column}_mean"], rows[f"{column}_ci"].fillna(0)
+        color = COLORS[variant]
+        axes.fill_between(
+            rows["n_agents"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
+        )
+        axes.plot(
+            rows["n_agents"], mean, color=color, linewidth=2, marker="o", label=LABELS[variant]
+        )
+    _agent_axis(axes, sorted(table["n_agents"].unique()))
+    axes.set_ylim(bottom=0)
+    axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
+    figure.savefig(path, dpi=150)
+
+
+def plot_aco_advantage(runs: pd.DataFrame, title: str, path: Path) -> None:
+    """How many times faster ACO N1 reaches 90% than the random walk, per number of agents."""
+    table = aco_advantage(runs)
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Number of agents N", "t_90 random walk / t_90 ACO N1")
+    axes.axhline(1, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
+    axes.plot(table["n_agents"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
+    _agent_axis(axes, table["n_agents"].tolist())
+    axes.set_ylim(bottom=0)
+    figure.savefig(path, dpi=150)
+
+
 def _box_plot(
     data: Sequence[pd.Series], variants: Sequence[str], title: str, ylabel: str, path: Path
 ) -> None:
@@ -328,6 +447,13 @@ def map_label(runs: pd.DataFrame) -> str:
     return ", ".join(sorted(runs["map"].unique()))
 
 
+def scenario_label(runs: pd.DataFrame) -> str:
+    """Scenario of the runs; with parties, t_90 counts their cans too."""
+    if "scenario" not in runs:
+        return "not recorded"
+    return ", ".join(sorted(runs["scenario"].unique()))
+
+
 def format_party_summary(results: Results) -> str:
     """P4 tables as Markdown."""
     table = _markdown_table(
@@ -368,8 +494,65 @@ def format_party_summary(results: Results) -> str:
     )
 
 
+def format_agent_summary(runs: pd.DataFrame) -> str:
+    """P5 tables as Markdown."""
+    table = _markdown_table(
+        ("N", "Variant", "t_90", "Agent-steps N · t_90", "Gini", "Reached 90%"),
+        (
+            (
+                row.n_agents,
+                row.variant,
+                _with_ci(row.t_90_mean, row.t_90_ci, 0),
+                _with_ci(row.work_mean, row.work_ci, 0),
+                _with_ci(row.gini_mean, row.gini_ci, 3),
+                f"{row.t_90_reached}/{row.runs}",
+            )
+            # itertuples keeps the integer columns integers, iterrows can make them floats
+            for row in agent_sweep_table(runs).itertuples()
+        ),
+    )
+    advantage = _markdown_table(
+        ("N", "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
+        (
+            (row.n_agents, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
+            for row in aco_advantage(runs).itertuples()
+        ),
+    )
+    significance = _markdown_table(
+        ("N", "p-value", "Bonferroni threshold", "Significant"),
+        (
+            (
+                row.n_agents,
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
+            )
+            for row in agent_sweep_significance(runs).itertuples()
+        ),
+    )
+    variant_a, variant_b = P5_PAIR
+    return (
+        "# Number of agents (P5)\n\n"
+        f"Map: {map_label(runs)}. Scenario: {scenario_label(runs)}.\n\n"
+        "Mean ± 95% confidence interval. A run below 90% counts as the step limit T.\n\n"
+        f"{table}\n\n"
+        "## Advantage of ACO N1\n\n"
+        "Ratio of the mean t_90 values over the seeds both variants ran on.\n\n"
+        f"{advantage}\n\n"
+        "## Significance\n\n"
+        f"Two-sided Mann-Whitney test of t_90, {variant_a} vs {variant_b}, one test per N, "
+        "Bonferroni correction over those tests.\n\n"
+        f"{significance}\n"
+    )
+
+
 def report_text(results: Results) -> str:
-    """Everything `summary.md` holds: P1 and P2 tables, and P4 in a run with parties."""
+    """Everything `summary.md` holds: P1 and P2 tables, and P4 in a run with parties.
+
+    Runs with several numbers of agents get only the P5 tables.
+    """
+    if has_agent_sweep(results):
+        return format_agent_summary(results.runs)
     text = format_summary(results.runs)
     if has_parties(results):
         text += "\n" + format_party_summary(results)
@@ -428,8 +611,12 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     written = []
-    available = set(results.runs["variant"])
     label = map_label(results.runs)
+    if has_agent_sweep(results):
+        written += _write_agent_figures(results.runs, label, output)
+        available = set()  # P1, P2 and P4 would mix runs of different sizes
+    else:
+        available = set(results.runs["variant"])
     if available.issuperset(P1_VARIANTS):
         path = output / "p1_collection_curve.png"
         plot_collection_curves(results, P1_VARIANTS, f"P1: ACO vs random walk ({label})", path)
@@ -442,7 +629,7 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
         path = output / "p2_cans_per_agent.png"
         plot_cans_per_agent(results, P2_VARIANTS, f"P2: cans delivered per agent ({label})", path)
         written.append(path)
-    if has_parties(results) and available.issuperset(P2_VARIANTS):
+    if available and has_parties(results) and available.issuperset(P2_VARIANTS):
         path = output / "p4_cans_on_map.png"
         plot_cans_on_map(results, P2_VARIANTS, f"P4: cans on the map with parties ({label})", path)
         written.append(path)
@@ -454,6 +641,19 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     path.write_text(report_text(results), encoding="utf-8")
     written.append(path)
     return written
+
+
+def _write_agent_figures(runs: pd.DataFrame, label: str, output: Path) -> list[Path]:
+    paths = [output / f"p5_{name}.png" for name in ("t90_vs_agents", "work_vs_agents")]
+    title = f"P5: time to 90% of the cans ({label})"
+    plot_against_agents(runs, "t_90", title, "t_90 [steps]", paths[0])
+    title = f"P5: agent-steps to 90% of the cans ({label})"
+    plot_against_agents(runs, "work", title, "N · t_90", paths[1])
+    if set(runs["variant"]).issuperset(P5_PAIR):
+        path = output / "p5_aco_advantage.png"
+        plot_aco_advantage(runs, f"P5: how many times faster ACO N1 is ({label})", path)
+        paths.append(path)
+    return paths
 
 
 def main(argv: list[str] | None = None) -> None:

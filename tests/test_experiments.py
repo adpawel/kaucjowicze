@@ -12,6 +12,7 @@ from kaucjowicze.experiments import (
     TIMELINE_COLUMNS,
     VARIANTS,
     main,
+    run_agent_counts,
     run_experiment,
     write_tables,
 )
@@ -320,3 +321,57 @@ def test_command_line_rejects_a_limit_before_the_last_party(tmp_path, capsys):
         main(["--scenario", "dynamic", "--max-steps", "5", "--output", str(tmp_path)])
     assert exc.value.code != 0
     assert "party" in capsys.readouterr().err
+
+
+def test_agent_counts_share_seeds_and_number_runs_on():
+    labels = []
+    tables = run_agent_counts(
+        seeds=[0, 1],
+        counts=[2, 4],
+        config=SMALL,
+        progress=lambda done, total, label: labels.append((done, total, label)),
+    )
+
+    assert [row["run_id"] for row in tables.runs] == list(range(12))
+    assert [row["n_agents"] for row in tables.runs] == [2] * 6 + [4] * 6
+    assert {row["seed"] for row in tables.runs} == {0, 1}
+    run_ids = {row["run_id"] for row in tables.runs}
+    assert {row["run_id"] for row in tables.timeline} == run_ids
+    for run in tables.runs:
+        agents = [row for row in tables.agents if row["run_id"] == run["run_id"]]
+        assert len(agents) == run["n_agents"]
+    assert labels[0] == (1, 12, "N = 2, random, seed 0")
+    assert labels[-1] == (12, 12, "N = 4, aco/individual, seed 1")
+
+
+def test_one_agent_count_gives_the_plain_experiment():
+    assert run_agent_counts([0, 1], [SMALL.n_agents], SMALL) == run_experiment([0, 1], SMALL)
+
+
+def test_run_ids_can_start_later():
+    tables = run_experiment(seeds=[0], config=SMALL, first_run_id=7)
+    assert [row["run_id"] for row in tables.runs] == [7, 8, 9]
+    assert {row["run_id"] for row in tables.agents} == {7, 8, 9}
+
+
+def test_several_agent_counts_get_their_own_default_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--n-agents", "1", "3"])
+    runs = _read(tmp_path / "results" / "test_agents" / "runs.csv")
+    assert [row["n_agents"] for row in runs] == ["1"] * 3 + ["3"] * 3
+    assert not (tmp_path / "results" / "test").exists()
+
+
+@pytest.mark.parametrize(("values", "message"), [(["0"], "positive"), (["5", "5"], "repeat")])
+def test_command_line_rejects_invalid_agent_counts(values, message, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--n-agents", *values, "--output", str(tmp_path)])
+    assert exc.value.code != 0
+    assert message in capsys.readouterr().err
+
+
+def test_one_count_other_than_the_default_never_replaces_the_default_results(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--n-agents", "3"])
+    assert (tmp_path / "results" / "test_agents" / "runs.csv").exists()
+    assert not (tmp_path / "results" / "test").exists()

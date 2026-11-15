@@ -48,9 +48,11 @@ python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus
 python -m kaucjowicze.plots --input results/campus
 python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --scenario dynamic
 python -m kaucjowicze.plots --input results/campus_dynamic
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --n-agents 5 10 20 40 80
+python -m kaucjowicze.plots --input results/campus_agents
 ```
 
-`kaucjowicze.experiments` runs every variant on the same seeds and writes `runs.csv`, `timeline.csv`, `agents.csv` and `events.csv`, replacing earlier files. They go to `results/<map>` (`results/<map>_dynamic` with `--scenario dynamic`) unless `--output` says otherwise, and `--max-steps` changes the step limit. In the dynamic scenario half of the clusters are there from the start and the rest come as parties during the run; every variant gets the same parties for a seed, and the report adds comparison P4: how fast each variant takes up a party. `kaucjowicze.plots` writes the figures and `summary.md` with means, confidence intervals and p-values to `figures` next to the CSV files. `results/` is not tracked by git.
+`kaucjowicze.experiments` runs every variant on the same seeds and writes `runs.csv`, `timeline.csv`, `agents.csv` and `events.csv`, replacing earlier files. They go to `results/<map>` (`results/<map>_dynamic` with `--scenario dynamic`) unless `--output` says otherwise, and `--max-steps` changes the step limit. In the dynamic scenario half of the clusters are there from the start and the rest come as parties during the run; every variant gets the same parties for a seed, and the report adds comparison P4: how fast each variant takes up a party. `--n-agents` takes one or more numbers of agents, each run on the same seeds; any choice other than the default goes to `results/<map>_agents` (`results/<map>_dynamic_agents` with `--scenario dynamic`), so it never replaces the default results. With several values the report shows only comparison P5: how the number of agents changes the collection time. `kaucjowicze.plots` writes the figures and `summary.md` with means, confidence intervals and p-values to `figures` next to the CSV files. `results/` is not tracked by git.
 
 ## Campus map
 
