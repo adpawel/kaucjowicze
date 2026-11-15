@@ -1,4 +1,6 @@
-"""Figures and summary tables of comparisons P1 and P2, made from the CSV files of an experiment.
+"""Figures and summary tables of comparisons P1, P2 and P4, made from experiment CSV files.
+
+P4 compares how fast the variants take up the cans of parties in the dynamic scenario.
 
 `python -m kaucjowicze.plots` needs the optional `analysis` dependencies.
 """
@@ -44,6 +46,7 @@ class Results:
     runs: pd.DataFrame
     timeline: pd.DataFrame
     agents: pd.DataFrame
+    events: pd.DataFrame | None = None  # `None`: files written before parties existed
 
 
 def load_results(input_dir: str | Path) -> Results:
@@ -52,9 +55,11 @@ def load_results(input_dir: str | Path) -> Results:
     runs = pd.read_csv(directory / "runs.csv")
     timeline = pd.read_csv(directory / "timeline.csv")
     agents = pd.read_csv(directory / "agents.csv")
+    events_path = directory / "events.csv"
+    events = pd.read_csv(events_path) if events_path.exists() else None
     has_reward = runs["reward"].notna()
     runs["variant"] = runs["algorithm"].where(~has_reward, runs["algorithm"] + "/" + runs["reward"])
-    return Results(runs, timeline, agents)
+    return Results(runs, timeline, agents, events)
 
 
 def mean_ci(values: Iterable[float]) -> tuple[float, float]:
@@ -152,6 +157,63 @@ def significance_table(runs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])
 
 
+def has_parties(results: Results) -> bool:
+    return results.events is not None and not results.events.empty
+
+
+def party_latencies(results: Results) -> pd.DataFrame:
+    """One row per run: its mean over parties, so each run counts as one observation.
+
+    A party below 50% by the step limit counts as the steps it had, from its start to T.
+    """
+    events = results.events.merge(results.runs[["run_id", "variant", "max_steps"]], on="run_id")
+    events["reached_50"] = events["latency_50"].notna()
+    events["latency_50"] = events["latency_50"].fillna(events["max_steps"] - events["spawn_step"])
+    return events.groupby(["run_id", "variant"], as_index=False).agg(
+        latency_first=("latency_first", "mean"),
+        latency_50=("latency_50", "mean"),
+        agents_visited=("agents_visited", "mean"),
+        overlap_share=("overlap_share", "mean"),
+        parties=("event_id", "count"),
+        reached_50=("reached_50", "sum"),
+    )
+
+
+def party_table(results: Results) -> pd.DataFrame:
+    """One row per variant: party latencies and spread over agents, means with intervals."""
+    per_run = party_latencies(results)
+    rows = []
+    for variant in _present(per_run, VARIANT_ORDER):
+        group = per_run[per_run["variant"] == variant]
+        row: dict[str, object] = {"variant": variant, "runs": len(group)}
+        for column in ("latency_first", "latency_50", "agents_visited", "overlap_share"):
+            row[f"{column}_mean"], row[f"{column}_ci"] = mean_ci(group[column])
+        row["reached_50"] = int(group["reached_50"].sum())
+        row["parties"] = int(group["parties"].sum())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def party_significance(results: Results) -> pd.DataFrame:
+    """Two-sided Mann-Whitney tests of the per-run mean steps to 50% of a party's cans."""
+    per_run = party_latencies(results)
+    rows = []
+    for variant_a, variant_b in TESTED_PAIRS:
+        a = per_run.loc[per_run["variant"] == variant_a, "latency_50"]
+        b = per_run.loc[per_run["variant"] == variant_b, "latency_50"]
+        if a.empty or b.empty:
+            continue
+        rows.append(
+            {
+                "metric": "latency_50",
+                "variant_a": variant_a,
+                "variant_b": variant_b,
+                "p_value": _mann_whitney_p(a, b),
+            }
+        )
+    return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])
+
+
 def _style_axes(figure: Figure, title: str, xlabel: str, ylabel: str):
     axes = figure.add_subplot()
     axes.set_title(title, color=TEXT_PRIMARY, loc="left", fontsize=12)
@@ -187,13 +249,45 @@ def plot_collection_curves(
 
 def plot_cans_per_agent(results: Results, variants: Sequence[str], title: str, path: Path) -> None:
     """Distribution of cans delivered per agent, pooled over all runs of a variant."""
-    figure = Figure(figsize=(8, 4.5), layout="constrained")
-    axes = _style_axes(figure, title, "", "Cans delivered per agent")
-    axes.grid(axis="x", visible=False)
     data = []
     for variant in variants:
         run_ids = results.runs.loc[results.runs["variant"] == variant, "run_id"]
         data.append(results.agents.loc[results.agents["run_id"].isin(run_ids), "cans"])
+    _box_plot(data, variants, title, "Cans delivered per agent", path)
+
+
+def plot_party_latency(results: Results, variants: Sequence[str], title: str, path: Path) -> None:
+    """Distribution over runs of the mean steps to pick up half of a party's cans."""
+    per_run = party_latencies(results)
+    data = [per_run.loc[per_run["variant"] == variant, "latency_50"] for variant in variants]
+    _box_plot(data, variants, title, "Steps to pick up 50% of a party (mean per run)", path)
+
+
+def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path: Path) -> None:
+    """Mean cans left on the map with its 95% band; dotted lines mark the parties."""
+    curves = results.timeline.pivot(index="step", columns="run_id", values="cans_on_map").ffill()
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Step", "Cans on the map")
+    for step in sorted(results.events["spawn_step"].unique()):
+        axes.axvline(step, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
+    for variant in variants:
+        run_ids = results.runs.loc[results.runs["variant"] == variant, "run_id"]
+        band = curve_band(curves[run_ids.tolist()])
+        color = COLORS[variant]
+        axes.fill_between(band.index, band["low"], band["high"], color=color, alpha=0.18, lw=0)
+        axes.plot(band.index, band["mean"], color=color, linewidth=2, label=LABELS[variant])
+    axes.set_xlim(left=0)
+    axes.set_ylim(bottom=0)
+    axes.legend(frameon=False, loc="upper right", labelcolor=TEXT_PRIMARY)
+    figure.savefig(path, dpi=150)
+
+
+def _box_plot(
+    data: Sequence[pd.Series], variants: Sequence[str], title: str, ylabel: str, path: Path
+) -> None:
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "", ylabel)
+    axes.grid(axis="x", visible=False)
     boxes = axes.boxplot(
         data,
         widths=0.45,
@@ -227,6 +321,54 @@ def map_label(runs: pd.DataFrame) -> str:
     if "map" not in runs:
         return "map not recorded"
     return ", ".join(sorted(runs["map"].unique()))
+
+
+def format_party_summary(results: Results) -> str:
+    """P4 tables as Markdown."""
+    table = _markdown_table(
+        (
+            "Variant",
+            "Steps to first pick-up",
+            "Steps to 50% of a party",
+            "Agents per party",
+            "Parties reaching 50%",
+            "Cans landing on cans",
+        ),
+        (
+            (
+                row["variant"],
+                _with_ci(row["latency_first_mean"], row["latency_first_ci"], 0),
+                _with_ci(row["latency_50_mean"], row["latency_50_ci"], 0),
+                _with_ci(row["agents_visited_mean"], row["agents_visited_ci"], 1),
+                f"{row['reached_50']}/{row['parties']}",
+                f"{100 * row['overlap_share_mean']:.1f}%",
+            )
+            for _, row in party_table(results).iterrows()
+        ),
+    )
+    significance = _markdown_table(
+        ("Metric", "Variant A", "Variant B", "p-value"),
+        (
+            (row["metric"], row["variant_a"], row["variant_b"], f"{row['p_value']:.3g}")
+            for _, row in party_significance(results).iterrows()
+        ),
+    )
+    return (
+        "## Parties (P4)\n\n"
+        "Mean over the parties of a run, then mean ± 95% interval over runs. Steps count from a "
+        "party to a pick-up. A party below 50% by the limit counts as the steps it had.\n\n"
+        f"{table}\n\n"
+        "Two-sided Mann-Whitney test of the per-run means, no correction.\n\n"
+        f"{significance}\n"
+    )
+
+
+def report_text(results: Results) -> str:
+    """Everything `summary.md` holds: P1 and P2 tables, and P4 in a run with parties."""
+    text = format_summary(results.runs)
+    if has_parties(results):
+        text += "\n" + format_party_summary(results)
+    return text
 
 
 def format_summary(runs: pd.DataFrame) -> str:
@@ -295,8 +437,16 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
         path = output / "p2_cans_per_agent.png"
         plot_cans_per_agent(results, P2_VARIANTS, f"P2: cans delivered per agent ({label})", path)
         written.append(path)
+    if has_parties(results) and available.issuperset(P2_VARIANTS):
+        path = output / "p4_cans_on_map.png"
+        plot_cans_on_map(results, P2_VARIANTS, f"P4: cans on the map with parties ({label})", path)
+        written.append(path)
+        path = output / "p4_party_latency.png"
+        title = f"P4: how fast a party is taken up ({label})"
+        plot_party_latency(results, P2_VARIANTS, title, path)
+        written.append(path)
     path = output / "summary.md"
-    path.write_text(format_summary(results.runs), encoding="utf-8")
+    path.write_text(report_text(results), encoding="utf-8")
     written.append(path)
     return written
 
@@ -314,7 +464,7 @@ def main(argv: list[str] | None = None) -> None:
     results = load_results(args.input)
     output = args.output or args.input / "figures"
     write_report(results, output)
-    print(format_summary(results.runs))
+    print(report_text(results))
     print(f"Report written to {output}")
 
 

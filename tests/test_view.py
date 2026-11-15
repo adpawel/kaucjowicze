@@ -3,6 +3,7 @@ import pytest
 
 from kaucjowicze.agent import AgentState
 from kaucjowicze.config import SimulationConfig
+from kaucjowicze.factory import build_simulation
 from kaucjowicze.grid import Grid
 from kaucjowicze.policies import RandomWalkPolicy
 from kaucjowicze.simulation import Simulation
@@ -18,6 +19,7 @@ from kaucjowicze.view import (
     compose_map_image,
     compose_photo_overlay,
     hud_lines,
+    longest_hud_lines,
 )
 
 
@@ -204,3 +206,12 @@ def test_photo_toggle_and_hud_status():
     assert "photo off" in "\n".join(hud_lines(campus, "random", 0, playback))
     playback.toggle_photo()
     assert "photo on" in "\n".join(hud_lines(campus, "random", 0, playback))
+
+
+def test_hud_counts_parties_only_in_a_run_with_them():
+    assert "parties" not in "\n".join(hud_lines(_small_sim(), "random", 0, Playback()))
+    sim = build_simulation("random", seed=0, config=SimulationConfig(scenario="dynamic"))
+    text = "\n".join(hud_lines(sim, "random", 0, Playback()))
+    assert "parties 0/3" in text
+    assert f"cans 0/{sim.total_cans}" in text
+    assert "parties 3/3" in "\n".join(longest_hud_lines(sim, "random", 0))

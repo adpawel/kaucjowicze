@@ -17,6 +17,7 @@ from kaucjowicze.plots import (  # noqa: E402
     load_results,
     main,
     mean_ci,
+    party_latencies,
     significance_table,
     summary_table,
     write_report,
@@ -240,3 +241,84 @@ def test_summary_names_the_map(result_dir):
 def test_report_goes_next_to_the_results_by_default(result_dir):
     main(["--input", str(result_dir)])
     assert (result_dir / "figures" / "summary.md").exists()
+
+
+@pytest.fixture(scope="module")
+def dynamic_dir(tmp_path_factory):
+    config = SimulationConfig(
+        width=30,
+        height=20,
+        scenario="dynamic",
+        n_clusters=1,
+        cans_per_cluster=5,
+        n_background_cans=0,
+        n_events=2,
+        event_start=20,
+        event_interval=20,
+        n_agents=3,
+        max_steps=200,
+    )
+    output = tmp_path_factory.mktemp("dynamic")
+    write_tables(run_experiment(seeds=[0, 1, 2], config=config), output)
+    return output
+
+
+def test_static_report_has_no_party_comparison(result_dir, tmp_path):
+    results = load_results(result_dir)
+    assert results.events is not None and results.events.empty
+    names = {path.name for path in write_report(results, tmp_path)}
+    assert not any(name.startswith("p4_") for name in names)
+    assert "Parties" not in (tmp_path / "summary.md").read_text(encoding="utf-8")
+
+
+def test_dynamic_report_adds_the_party_comparison(dynamic_dir, tmp_path):
+    names = {path.name for path in write_report(load_results(dynamic_dir), tmp_path)}
+    assert {"p4_cans_on_map.png", "p4_party_latency.png"} <= names
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "## Parties (P4)" in summary
+    assert "latency_50" in summary
+
+
+def test_party_latencies_have_one_row_per_run(dynamic_dir):
+    results = load_results(dynamic_dir)
+    per_run = party_latencies(results)
+    assert len(per_run) == len(results.runs)
+    assert (per_run["parties"] == 2).all()
+
+
+def test_party_below_half_counts_the_steps_it_had():
+    runs = pd.DataFrame([{"run_id": 0, "variant": "random", "max_steps": 100}])
+    events = pd.DataFrame(
+        [
+            {
+                "run_id": 0,
+                "event_id": 1,
+                "spawn_step": 20,
+                "latency_first": 5.0,
+                "latency_50": 10.0,
+                "agents_visited": 2,
+                "overlap_share": 0.0,
+            },
+            {
+                "run_id": 0,
+                "event_id": 2,
+                "spawn_step": 60,
+                "latency_first": None,
+                "latency_50": None,
+                "agents_visited": 0,
+                "overlap_share": 0.0,
+            },
+        ]
+    )
+    results = Results(runs, pd.DataFrame(), pd.DataFrame(), events)
+    (row,) = party_latencies(results).to_dict("records")
+    assert row["latency_50"] == pytest.approx((10 + 40) / 2)
+    assert row["reached_50"] == 1
+
+
+def test_results_without_party_file_still_load(result_dir, tmp_path):
+    for name in ("runs.csv", "timeline.csv", "agents.csv"):
+        (tmp_path / name).write_bytes((result_dir / name).read_bytes())
+    results = load_results(tmp_path)
+    assert results.events is None
+    write_report(results, tmp_path / "figures")

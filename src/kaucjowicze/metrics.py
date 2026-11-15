@@ -1,12 +1,12 @@
 """Metrics of a single run. They only read the simulation, so recording never changes a run."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from kaucjowicze.agent import AgentState
-from kaucjowicze.simulation import Simulation
+from kaucjowicze.simulation import EventLog, Simulation
 
 
 def gini(values: Sequence[float]) -> float:
@@ -54,12 +54,68 @@ class AgentRecord:
 
 
 @dataclass(frozen=True)
+class EventRecord:
+    """How fast the colony took up the cans of one party.
+
+    Latencies count steps from the party to a pick-up, not a delivery: a bag mixes cans of
+    different sources, so a delivery cannot be traced back to one. `None`: never happened.
+    """
+
+    event_id: int
+    spawn_step: int
+    x: int
+    y: int
+    cans: int
+    overlap: int  # cans that landed on a cell already holding cans
+    latency_first: int | None
+    latency_50: int | None
+    latency_90: int | None
+    picked_up: int
+    agents_visited: int
+
+    @property
+    def overlap_share(self) -> float | None:
+        return self.overlap / self.cans if self.cans else None
+
+
+def _event_record(log: EventLog) -> EventRecord:
+    event = log.event
+    steps = log.pickup_steps  # in the order of pick-ups, so never decreasing
+
+    def latency(percent: int) -> int | None:
+        needed = -(-percent * event.cans // 100)  # rounded up, as in `steps_to_reach`
+        if event.cans == 0 or len(steps) < needed:
+            return None
+        return steps[needed - 1] - event.step
+
+    return EventRecord(
+        event_id=event.id,
+        spawn_step=event.step,
+        x=event.center[0],
+        y=event.center[1],
+        cans=event.cans,
+        overlap=log.overlap,
+        latency_first=steps[0] - event.step if steps else None,
+        latency_50=latency(50),
+        latency_90=latency(90),
+        picked_up=len(steps),
+        agents_visited=len(log.agents),
+    )
+
+
+@dataclass(frozen=True)
 class RunRecord:
     """Everything measured in one run."""
 
-    initial_cans: int
+    initial_cans: int  # on the map at the start
     timeline: list[TimelineRow]
     agents: list[AgentRecord]
+    total_cans: int | None = None  # with the cans of every party; `None` means `initial_cans`
+    events: list[EventRecord] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.total_cans is None:
+            object.__setattr__(self, "total_cans", self.initial_cans)
 
     @property
     def steps(self) -> int:
@@ -71,7 +127,7 @@ class RunRecord:
 
     def _steps_to(self, percent: int) -> int | None:
         collected = [row.cans_collected for row in self.timeline]
-        return steps_to_reach(collected, self.initial_cans, percent)
+        return steps_to_reach(collected, self.total_cans, percent)
 
     @property
     def t_50(self) -> int | None:
@@ -134,4 +190,5 @@ def record_run(sim: Simulation) -> RunRecord:
         AgentRecord(agent.id, agent.cans_collected, agent.path_length, agent.trips)
         for agent in sim.agents
     ]
-    return RunRecord(sim.initial_cans, timeline, agents)
+    events = [_event_record(log) for log in sim.event_logs if log.event.step <= sim.step_count]
+    return RunRecord(sim.initial_cans, timeline, agents, sim.total_cans, events)

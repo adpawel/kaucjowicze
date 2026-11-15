@@ -152,6 +152,11 @@ def _format_hud(
     ]
 
 
+def _parties(sim: Simulation, spawned: int) -> str:
+    """Parties so far, shown only in a run that has any."""
+    return f" | parties {spawned}/{len(sim.events)}" if sim.events else ""
+
+
 def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> list[str]:
     """Text of the status bar, one string per line."""
     carrying = sum(agent.state is AgentState.CARRYING for agent in sim.agents)
@@ -176,7 +181,8 @@ def hud_lines(sim: Simulation, variant: str, seed: int, playback: Playback) -> l
     return _format_hud(
         variant,
         seed,
-        f"step {sim.step_count}/{sim.config.max_steps} | cans {sim.collected}/{sim.initial_cans}",
+        f"step {sim.step_count}/{sim.config.max_steps} | cans {sim.collected}/{sim.total_cans}"
+        + _parties(sim, sim.events_spawned),
         f"searching {searching} | carrying {carrying}",
         playback.speed,
         pheromone,
@@ -192,7 +198,7 @@ def longest_hud_lines(sim: Simulation, variant: str, seed: int) -> list[str]:
         variant,
         seed,
         f"step {sim.config.max_steps}/{sim.config.max_steps} "
-        f"| cans {sim.initial_cans}/{sim.initial_cans}",
+        f"| cans {sim.total_cans}/{sim.total_cans}" + _parties(sim, len(sim.events)),
         f"searching {n_agents} | carrying {n_agents}",
         max(SPEEDS),
         "n/a",

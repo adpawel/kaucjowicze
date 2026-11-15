@@ -28,7 +28,7 @@ python -m kaucjowicze --algorithm aco --seed 0                      # ACO, share
 python -m kaucjowicze --algorithm aco --reward individual --seed 0  # individual reward
 ```
 
-Add `--map campus` to run on the AGH Student Campus instead of the test map, `--gui` to open a window or `--show-map` to print the map before the run. Default parameters are in `src/kaucjowicze/config.py`.
+Add `--map campus` to run on the AGH Student Campus instead of the test map, `--scenario dynamic` to add parties (new can clusters) during the run, `--gui` to open a window or `--show-map` to print the map before the run. Default parameters are in `src/kaucjowicze/config.py`.
 
 Window controls:
 
@@ -46,9 +46,11 @@ Window controls:
 ```bash
 python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus
 python -m kaucjowicze.plots --input results/campus
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --scenario dynamic
+python -m kaucjowicze.plots --input results/campus_dynamic
 ```
 
-The first command runs every variant on the same seeds and writes `runs.csv`, `timeline.csv` and `agents.csv`, replacing earlier files. They go to `results/<map>` unless `--output` says otherwise, and `--max-steps` changes the step limit. The second one writes the figures and `summary.md` with means, confidence intervals and p-values to `figures` next to the CSV files. `results/` is not tracked by git.
+`kaucjowicze.experiments` runs every variant on the same seeds and writes `runs.csv`, `timeline.csv`, `agents.csv` and `events.csv`, replacing earlier files. They go to `results/<map>` (`results/<map>_dynamic` with `--scenario dynamic`) unless `--output` says otherwise, and `--max-steps` changes the step limit. In the dynamic scenario half of the clusters are there from the start and the rest come as parties during the run; every variant gets the same parties for a seed, and the report adds comparison P4: how fast each variant takes up a party. `kaucjowicze.plots` writes the figures and `summary.md` with means, confidence intervals and p-values to `figures` next to the CSV files. `results/` is not tracked by git.
 
 ## Campus map
 

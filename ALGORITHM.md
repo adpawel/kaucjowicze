@@ -356,3 +356,83 @@ Pomiar z 7 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first
 - **Wnioski o szybkości nie zależą od tych zmian.** We wszystkich pomiarach ACO i N2 są istotnie szybsze od losowego spaceru, a między N1 i N2 nie ma istotnej różnicy.
 - **Pojedynczy przebieg jest bardzo czuły na drobne zmiany.** Zamknięcie 5 komórek zmieniło średnie t₉₀ N1 na tych samych ziarnach z 2455 na 2204. Różnica mieści się w przedziale ufności (± 559), więc różnic tego rzędu nie należy interpretować.
 - **Wniosek o Ginim N1 względem losowego spaceru zależy od układu puszek.** Przy skupiskach przy akademikach różnica jest istotna, a przy poprzednim, bardziej rozproszonym układzie nie była. Mierzymy go więc dla przyjętego założenia, a nie jako ogólną własność ACO.
+
+## 15. Scenariusz dynamiczny: imprezy w trakcie przebiegu (P4)
+
+W scenariuszu statycznym N1 i N2 są równie szybkie (punkt 14). Scenariusz statyczny nie sprawdza jednak, czy kolonia szybko znajduje nowe źródła. Scenariusz dynamiczny (`scenario="dynamic"`, opcja `--scenario dynamic`) dodaje skupiska, czyli „imprezy”, w trakcie przebiegu.
+
+**Hipoteza:** ACO N1 reaguje na imprezę szybciej niż N2 i losowy spacer, bo pierwszy agent, który ją znajdzie, ściąga innych śladem.
+
+### Założenia
+
+| Parametr | Pole w `SimulationConfig` | Miasteczko | Mapa testowa |
+|---|---|---|---|
+| skupiska na starcie | `n_clusters` | 3 | 3 |
+| liczba imprez | `n_events` | 3 | 3 |
+| krok pierwszej imprezy | `event_start` | 1000 | 250 |
+| odstęp między imprezami | `event_interval` | 1000 | 250 |
+| puszki na imprezę | `cans_per_event` | 45 (= `cans_per_cluster`) | 40 |
+
+- **Ta sama liczba puszek co w scenariuszu statycznym.** Na Miasteczku 3 × 45 na starcie i 3 × 45 z imprez daje 270 puszek. Wartości domyślne scenariusza są w `SCENARIO_DEFAULTS`, a kroki imprez, zależne od mapy, w `MAP_DEFAULTS`.
+- **Środki imprez losujemy tą samą regułą co skupiska** (blisko akademika, punkt 13), z tym samym rozrzutem σ.
+- **Odstęp 1000 kroków** sprawdziliśmy na osobnych ziarnach 100–109. W ACO i N2 przed kolejną imprezą zostaje na mapie średnio 9–17 puszek z poprzedniej fali, więc fale prawie się nie nakładają. Losowy spacer nie nadąża (61–71 puszek), ale to cecha wariantu, a nie skali czasu.
+- **Koniec przebiegu:** wszystkie imprezy już się pojawiły i oddano wszystkie puszki, albo limit T. Progi t₅₀, t₉₀ i t₁₀₀ liczymy od wszystkich puszek przebiegu (`total_cans` w `runs.csv`).
+- **Ostatnia impreza musi przyjść przed limitem T**, inaczej konfiguracja jest odrzucana.
+
+### Te same imprezy dla każdego wariantu
+
+Harmonogram (krok, środek, komórki puszek) losujemy z góry w `build_simulation`, z osobnego strumienia `default_rng([seed, 1])`. Komórki zależą tylko od przeszkód, a nie od tego, co robią agenci. Z tego wynikają dwie rzeczy:
+
+- N1, N2 i losowy spacer dostają dla danego ziarna te same imprezy w tych samych krokach,
+- główny strumień (puszki startowe i polityki) nie traci ani jednej liczby, więc przebiegi statyczne się nie zmieniają. Sprawdziliśmy to: `timeline.csv` i `agents.csv` z ziaren 200–229 są identyczne bajt w bajt z wynikami sprzed zmiany, a `runs.csv` różni się tylko nową kolumną `total_cans`.
+
+Impreza pojawia się po kroku, w którym `step_count` osiąga jej krok, więc wiersz `timeline.csv` z tym krokiem już ją pokazuje.
+
+### Metryki reakcji (`events.csv`)
+
+Puszki imprezy mierzymy przy **podniesieniu**, a nie oddaniu, bo worek miesza puszki z różnych źródeł. Każdą puszkę na mapie przypisujemy do źródła (`CanLedger`: 0 to puszki ze startu, 1, 2, … to imprezy). Gdy na jednej komórce leżą puszki z kilku źródeł, agent zabiera najstarszą (FIFO). Takie założenie nie zawyża tempa reakcji na nową imprezę.
+
+| Kolumna | Znaczenie |
+|---|---|
+| `latency_first` | kroki od imprezy do pierwszego podniesienia jej puszki |
+| `latency_50`, `latency_90` | kroki do podniesienia 50% i 90% jej puszek (próg zaokrąglony w górę, jak w punkcie 11) |
+| `agents_visited` | ilu różnych agentów podniosło z niej co najmniej jedną puszkę |
+| `overlap_share` | odsetek jej puszek, które spadły na komórkę z puszkami |
+
+W porównaniu każdy przebieg to jedna obserwacja: średnia z jego trzech imprez. Impreza, która do limitu T nie osiągnęła 50%, liczy się jako `T − krok imprezy`. Test Manna-Whitneya dwustronny, bez korekty, tak jak w punkcie 11.
+
+**Nie wdrożyliśmy** metryki przywiązania do wyczerpanych skupisk (czas agentów spędzony przy pustych źródłach). Zostaje na później.
+
+### Wyniki
+
+Pomiar z 15 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --scenario dynamic`, ziarna 200–229, T = 20000. Średnia ± 95%.
+
+| Wariant | Kroki do 1. podniesienia | Kroki do 50% imprezy | Mediana kroków do 50% | Agenci na imprezę | Imprezy z 50% | t₉₀ całości | Gini |
+|---|---|---|---|---|---|---|---|
+| losowy spacer | 640 ± 449 | 2143 ± 769 | 1224 | 5.0 ± 0.2 | 90/90 | 7321 ± 1558 | 0.423 ± 0.026 |
+| ACO N1 | 352 ± 119 | 530 ± 157 | 413 | 3.6 ± 0.3 | 90/90 | 3850 ± 520 | 0.520 ± 0.030 |
+| N2 | 450 ± 290 | 667 ± 324 | 387 | 2.4 ± 0.2 | 90/90 | 4153 ± 674 | 0.686 ± 0.020 |
+
+| Porównanie | p dla kroków do 50% imprezy | p dla t₉₀ | p dla agentów na imprezę |
+|---|---|---|---|
+| ACO N1 / losowy spacer | 3.8 · 10⁻⁷ | 4.1 · 10⁻⁷ | — |
+| ACO N1 / N2 | 0.68 | 0.50 | 2.5 · 10⁻⁸ |
+| N2 / losowy spacer | 6.3 · 10⁻⁶ | 8.6 · 10⁻⁶ | — |
+
+Średnie kroki do 50% kolejnych imprez:
+
+| Wariant | impreza 1 | impreza 2 | impreza 3 |
+|---|---|---|---|
+| losowy spacer | 2203 | 2020 | 2205 |
+| ACO N1 | 620 | 531 | 440 |
+| N2 | 639 | 382 | 980 |
+
+Na komórki z puszkami spadło średnio 0–1.2% puszek imprezy (najwięcej 53% w jednej imprezie), więc przypisanie FIFO prawie nie wpływa na wyniki.
+
+**Wnioski:**
+
+- **Hipoteza się nie potwierdziła.** ACO N1 i N2 reagują na imprezę równie szybko (530 wobec 667 kroków do 50%, p = 0.68, N1 szybsze na 15 z 30 map). Brak istotnej różnicy nie oznacza, że warianty są równe.
+- **Oba warianty z pamięcią lub śladem reagują 3–4 razy szybciej niż losowy spacer** (2143 kroków do 50% wobec 530 i 667, różnice istotne także po korekcie Bonferroniego).
+- **N1 rozkłada imprezę na więcej agentów niż N2** (3.6 wobec 2.4, p = 2.5 · 10⁻⁸). Ślad ściąga do imprezy innych, a w N2 skupisko zbiera ten, kto je znalazł. Ten test nie był zaplanowany przed pomiarem, więc to tylko wskazówka. Losowy spacer ma najwięcej agentów na imprezę, bo jego imprezy leżą długo i trafia na nie wielu przypadkowych agentów.
+- **N1 jest bardziej przewidywalne niż N2.** Przedział N2 jest dwa razy szerszy, a średnia N2 skacze między imprezami (382–980 kroków), podczas gdy N1 przyspiesza z każdą imprezą (620, 531, 440). Prawdopodobnie zależy to od tego, czy impreza leży blisko zapamiętanego źródła agenta N2, ale tego nie mierzyliśmy.
+- **Wniosek z punktu 14 przenosi się na scenariusz dynamiczny:** N1 i N2 zbierają całość równie szybko, a N2 dzieli puszki mniej równo (Gini 0.686 wobec 0.520).
