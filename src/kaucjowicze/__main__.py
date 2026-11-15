@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from kaucjowicze.config import MAPS, TEST_MAP, SimulationConfig
+from kaucjowicze.config import MAPS, SCENARIOS, STATIC, TEST_MAP, SimulationConfig
 from kaucjowicze.factory import ALGORITHMS, build_simulation
 from kaucjowicze.rewards import REWARDS, SHARED, agent_rewards
 
@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> None:
         "--reward", choices=REWARDS, default=None, help="reward of ACO agents (default: shared)"
     )
     parser.add_argument("--map", choices=MAPS, default=TEST_MAP, help="map to run on")
+    parser.add_argument(
+        "--scenario", choices=SCENARIOS, default=STATIC, help="static cans or parties during a run"
+    )
     parser.add_argument("--show-map", action="store_true", help="print the map before the run")
     parser.add_argument("--gui", action="store_true", help="show the simulation in a window")
     args = parser.parse_args(argv)
@@ -47,7 +50,7 @@ def main(argv: list[str] | None = None) -> None:
         if seed is None:  # restart has to reproduce the same map, so the seed must be known
             seed = int(np.random.default_rng().integers(2**31))
 
-    config = SimulationConfig(map_name=args.map)
+    config = SimulationConfig(map_name=args.map, scenario=args.scenario)
     sim = build_simulation(args.algorithm, seed, reward, config)
     grid = sim.grid
     if args.show_map:
@@ -65,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Algorithm: {args.algorithm}{reward_label}, seed: {args.seed}")
     print(f"Map: {grid.width}x{grid.height}, bases: {grid.bases}, agents: {len(sim.agents)}")
     print(f"Steps: {sim.step_count} (limit {sim.config.max_steps})")
-    print(f"Collected: {sim.collected}/{sim.initial_cans} cans")
+    print(f"Collected: {sim.collected}/{sim.total_cans} cans")
     print(f"Trips: {sum(agent.trips for agent in sim.agents)}")
     print(f"Path length: {sum(agent.path_length for agent in sim.agents)}")
     if per_agent:

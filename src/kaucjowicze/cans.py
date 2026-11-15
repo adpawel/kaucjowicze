@@ -1,9 +1,28 @@
-"""Can placement (static scenario): Gaussian clusters plus uniform background noise."""
+"""Can placement: Gaussian clusters plus uniform background noise, and parties during a run."""
+
+from dataclasses import dataclass
 
 import numpy as np
 
 from kaucjowicze.config import SimulationConfig
-from kaucjowicze.grid import Grid
+from kaucjowicze.grid import Grid, Position
+
+
+@dataclass(frozen=True)
+class SpawnEvent:
+    """A party: one can lands on each of `cells` (repeats allowed) once `step` steps are done.
+
+    The `timeline.csv` row of `step` already shows them, and the first pick-up is at `step + 1`.
+    """
+
+    id: int  # 1, 2, ...; 0 stands for the cans present from the start
+    step: int
+    center: Position
+    cells: tuple[Position, ...]
+
+    @property
+    def cans(self) -> int:
+        return len(self.cells)
 
 
 def scatter_cans(grid: Grid, config: SimulationConfig, rng: np.random.Generator) -> None:
@@ -15,7 +34,8 @@ def scatter_cans(grid: Grid, config: SimulationConfig, rng: np.random.Generator)
     candidates = _cluster_candidates(grid, config, free)
     centers = candidates[rng.choice(len(candidates), size=config.n_clusters, replace=True)]
     for cx, cy in centers:
-        _place_cluster(grid, (int(cx), int(cy)), config, rng)
+        for pos in cluster_cells(grid, (int(cx), int(cy)), config.cans_per_cluster, config, rng):
+            grid.add_can(pos)
 
     for idx in rng.choice(len(free), size=config.n_background_cans, replace=True):
         x, y = free[idx]
@@ -38,22 +58,44 @@ def _cluster_candidates(grid: Grid, config: SimulationConfig, free: np.ndarray) 
     return close
 
 
-def _place_cluster(
+def schedule_events(
+    grid: Grid, config: SimulationConfig, rng: np.random.Generator
+) -> list[SpawnEvent]:
+    """Parties of a run, drawn up front so every variant gets the same ones for a seed.
+
+    Centres follow the rule of the starting clusters. Only obstacles decide where a can may lie,
+    so the cells do not depend on what the agents do. `rng` should be a stream of its own.
+    """
+    if not config.n_events:
+        return []
+    candidates = _cluster_candidates(grid, config, grid.free_cells())
+    events = []
+    for index in range(config.n_events):
+        cx, cy = candidates[rng.integers(len(candidates))]
+        center = (int(cx), int(cy))
+        cells = cluster_cells(grid, center, config.cans_per_event, config, rng)
+        step = config.event_start + index * config.event_interval
+        events.append(SpawnEvent(index + 1, step, center, tuple(cells)))
+    return events
+
+
+def cluster_cells(
     grid: Grid,
-    center: tuple[int, int],
+    center: Position,
+    count: int,
     config: SimulationConfig,
     rng: np.random.Generator,
-) -> None:
-    placed = 0
+) -> list[Position]:
+    """Cells of `count` cans spread around `center`; a cell appears once per can."""
+    cells = []
     attempts = 0
-    max_attempts = config.cans_per_cluster * 20
-    while placed < config.cans_per_cluster and attempts < max_attempts:
+    max_attempts = count * 20
+    while len(cells) < count and attempts < max_attempts:
         attempts += 1
         dx, dy = rng.normal(0.0, config.cluster_spread, size=2)
         pos = (int(round(center[0] + dx)), int(round(center[1] + dy)))
         if grid.is_free(pos):
-            grid.add_can(pos)
-            placed += 1
+            cells.append(pos)
     # Fallback for clusters squeezed between obstacles: put the rest in the centre
-    if placed < config.cans_per_cluster:
-        grid.add_can(center, config.cans_per_cluster - placed)
+    cells.extend([center] * (count - len(cells)))
+    return cells

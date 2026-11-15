@@ -1,10 +1,12 @@
+import hashlib
+
 import numpy as np
 import pytest
 
-from kaucjowicze.cans import _cluster_candidates, scatter_cans
+from kaucjowicze.cans import _cluster_candidates, scatter_cans, schedule_events
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.grid import Grid
-from kaucjowicze.maps import build_test_map
+from kaucjowicze.maps import build_map, build_test_map
 
 
 def _generate(seed: int):
@@ -84,3 +86,51 @@ def test_no_free_cell_near_a_dormitory_is_an_error_and_does_not_lift_the_constra
     config = SimulationConfig(cluster_dorm_distance=2)
     with pytest.raises(ValueError, match="No free cell within 2 cells"):
         _cluster_candidates(grid, config, grid.free_cells())
+
+
+@pytest.mark.parametrize(
+    ("map_name", "digest"), [("test", "b2006c42003dabcd"), ("campus", "323c04e3cac92fbe")]
+)
+def test_static_layout_is_unchanged_by_the_parties(map_name, digest):
+    # Digests of the layout before parties existed: the static results must not move
+    config = SimulationConfig(map_name=map_name, seed=7)
+    grid = build_map(config)
+    scatter_cans(grid, config, np.random.default_rng(7))
+    assert hashlib.sha256(grid.cans.tobytes()).hexdigest()[:16] == digest
+
+
+def _parties(seed: int, **kwargs):
+    config = SimulationConfig(scenario="dynamic", seed=seed, **kwargs)
+    grid = build_test_map(config)
+    return config, grid, schedule_events(grid, config, np.random.default_rng(seed))
+
+
+def test_static_scenario_has_no_parties():
+    config = SimulationConfig(seed=0)
+    grid = build_test_map(config)
+    assert schedule_events(grid, config, np.random.default_rng(0)) == []
+
+
+def test_parties_follow_the_schedule():
+    config, grid, events = _parties(seed=0, event_start=100, event_interval=40)
+    assert [event.id for event in events] == [1, 2, 3]
+    assert [event.step for event in events] == [100, 140, 180]
+    for event in events:
+        assert event.cans == config.cans_per_event == config.cans_per_cluster
+        assert all(grid.is_free(pos) for pos in event.cells)
+
+
+def test_party_centres_lie_close_to_a_dormitory():
+    config, grid, events = _parties(seed=1)
+    candidates = {tuple(cell) for cell in _cluster_candidates(grid, config, grid.free_cells())}
+    assert all(event.center in candidates for event in events)
+
+
+def test_same_seed_gives_same_parties():
+    assert _parties(seed=5)[2] == _parties(seed=5)[2]
+    assert _parties(seed=5)[2] != _parties(seed=6)[2]
+
+
+def test_cans_per_party_can_differ_from_a_cluster():
+    _, _, events = _parties(seed=0, cans_per_event=7)
+    assert [event.cans for event in events] == [7, 7, 7]

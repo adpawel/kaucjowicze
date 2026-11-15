@@ -181,3 +181,10 @@ def test_individual_restart_reproduces_the_run(monkeypatch):
         a.step()
         b.step()
     assert [agent.pos for agent in a.agents] == [agent.pos for agent in b.agents]
+
+
+def test_dynamic_scenario_runs_from_command_line(capsys):
+    main(["--algorithm", "aco", "--seed", "0", "--scenario", "dynamic"])
+    output = capsys.readouterr().out
+    collected = next(line for line in output.splitlines() if line.startswith("Collected"))
+    assert collected.endswith("/270 cans")  # 3 clusters at the start and 3 parties of 40 + 30

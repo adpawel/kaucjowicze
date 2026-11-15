@@ -4,9 +4,13 @@ The simulation holds no rendering state; a visualization only reads `grid`, `age
 `pheromone` and `step_count`.
 """
 
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+
 import numpy as np
 
 from kaucjowicze.agent import Agent, AgentState
+from kaucjowicze.cans import SpawnEvent
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
@@ -19,6 +23,42 @@ from kaucjowicze.pathfinding import (
 from kaucjowicze.policies import MovementPolicy
 
 
+@dataclass
+class EventLog:
+    """What happened to the cans of one party; steps count like `step_count` after a step."""
+
+    event: SpawnEvent
+    overlap: int = 0  # cans that landed on a cell already holding cans
+    pickup_steps: list[int] = field(default_factory=list)  # one entry per can picked up
+    agents: set[int] = field(default_factory=set)  # agents that picked up at least one can
+
+
+class CanLedger:
+    """Which source each can on the map comes from: 0 for the start, then the party ids.
+
+    A pick-up takes the oldest can on the cell, so a party never looks faster than it was.
+    It knows the cans on the grid when it is made and those of parties; a can added to the grid
+    in any other way is not traced, and a pick-up of it may be charged to the wrong source.
+    """
+
+    def __init__(self, grid: Grid, n_events: int) -> None:
+        self.counts = np.zeros((n_events + 1, grid.height, grid.width), dtype=np.int32)
+        self.counts[0] = grid.cans
+
+    def add(self, source: int, pos: Position) -> None:
+        self.counts[source, pos[1], pos[0]] += 1
+
+    def take(self, pos: Position) -> int | None:
+        """Source of the can taken from `pos`; `None` for a can the ledger never saw."""
+        x, y = pos
+        sources = np.flatnonzero(self.counts[:, y, x])
+        if sources.size == 0:
+            return None
+        source = int(sources[0])
+        self.counts[source, y, x] -= 1
+        return source
+
+
 class Simulation:
     def __init__(
         self,
@@ -27,8 +67,12 @@ class Simulation:
         policy: MovementPolicy,
         rng: np.random.Generator,
         pheromone: np.ndarray | None = None,
+        events: Sequence[SpawnEvent] = (),
     ) -> None:
-        """`pheromone` is an array [y, x] updated in place; `None` means no trails are left."""
+        """`pheromone` is an array [y, x] updated in place; `None` means no trails are left.
+
+        `events` are parties: their cans appear once `step_count` reaches their step.
+        """
         if not grid.bases:
             raise ValueError("Grid must have at least one base")
         if pheromone is not None and pheromone.shape != (grid.height, grid.width):
@@ -47,11 +91,41 @@ class Simulation:
         self.collected = 0
         self.step_count = 0
         self.pheromone = pheromone
+        self.events = sorted(events, key=lambda event: event.step)
+        if [event.id for event in self.events] != list(range(1, len(self.events) + 1)):
+            raise ValueError("Party ids must be 1, 2, ... in the order of their steps")
+        if self.events and self.events[-1].step >= config.max_steps:
+            raise ValueError("Every party must start before the step limit")
+        self.event_logs = [EventLog(event) for event in self.events]
+        self.events_spawned = 0
+        self.ledger = CanLedger(grid, len(self.events))
+        self._spawn_due()
+
+    @property
+    def total_cans(self) -> int:
+        """Cans of the whole run: those from the start and those of every party."""
+        return self.initial_cans + sum(event.cans for event in self.events)
+
+    @property
+    def next_event(self) -> SpawnEvent | None:
+        if self.events_spawned < len(self.events):
+            return self.events[self.events_spawned]
+        return None
 
     @property
     def is_finished(self) -> bool:
-        """All cans delivered to a base, or the step limit T reached."""
-        return self.collected >= self.initial_cans or self.step_count >= self.config.max_steps
+        """All cans of the run delivered to a base, or the step limit T reached."""
+        return self.collected >= self.total_cans or self.step_count >= self.config.max_steps
+
+    def _spawn_due(self) -> None:
+        """Leave the cans of every party whose step has come."""
+        while (event := self.next_event) is not None and event.step <= self.step_count:
+            log = self.event_logs[self.events_spawned]
+            log.overlap = sum(int(self.grid.cans[y, x] > 0) for x, y in event.cells)
+            for pos in event.cells:
+                self.grid.add_can(pos)
+                self.ledger.add(event.id, pos)
+            self.events_spawned += 1
 
     def run(self) -> None:
         while not self.is_finished:
@@ -67,11 +141,13 @@ class Simulation:
         if self.pheromone is not None:
             self.pheromone *= 1.0 - self.config.evaporation_rate
         self.step_count += 1
+        self._spawn_due()
 
     def _search(self, agent: Agent) -> None:
         target = first_step_to_nearest_can(self.grid, agent.pos, self.config.vision_radius)
         if target == agent.pos:
             self.grid.take_can(agent.pos)
+            self._note_pickup(agent)
             agent.bag += 1
             agent.steps_without_can = 0
             agent.source_cans = seen_cans(self.grid, agent.pos, self.config.vision_radius)
@@ -89,6 +165,13 @@ class Simulation:
             agent.state = AgentState.CARRYING
             return
         self._move(agent, self.policy.choose_move(agent, self.grid, self.rng, self.agents))
+
+    def _note_pickup(self, agent: Agent) -> None:
+        source = self.ledger.take(agent.pos)
+        if source:  # 0 and `None` are not parties
+            log = self.event_logs[source - 1]
+            log.pickup_steps.append(self.step_count + 1)  # the step ends once every agent acted
+            log.agents.add(agent.id)
 
     def _remember_source(self, agent: Agent) -> None:
         """Keep the richest source seen; what is seen at the remembered place replaces its count."""

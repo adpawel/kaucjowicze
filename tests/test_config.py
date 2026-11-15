@@ -91,3 +91,41 @@ def test_can_layout_defaults_depend_on_the_map_and_can_be_overridden():
 def test_dormitory_distance_must_be_positive(distance):
     with pytest.raises(ValueError, match="dormitory"):
         SimulationConfig(cluster_dorm_distance=distance)
+
+
+def test_dynamic_scenario_keeps_the_number_of_cans():
+    static = SimulationConfig(map_name="campus")
+    dynamic = SimulationConfig(map_name="campus", scenario="dynamic")
+    assert (static.n_clusters, static.n_events) == (6, 0)
+    assert (dynamic.n_clusters, dynamic.n_events) == (3, 3)
+    assert dynamic.cans_per_event == dynamic.cans_per_cluster == 45
+    assert (dynamic.event_start, dynamic.event_interval) == (1000, 1000)
+    assert dynamic.last_event_step == 3000
+    assert static.last_event_step is None
+
+
+def test_scenario_defaults_can_be_overridden():
+    config = SimulationConfig(scenario="dynamic", n_clusters=5, n_events=1, cans_per_event=3)
+    assert (config.n_clusters, config.n_events, config.cans_per_event) == (5, 1, 3)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"scenario": "party"},
+        {"scenario": "dynamic", "n_events": -1},
+        {"scenario": "dynamic", "cans_per_event": -1},
+        {"scenario": "dynamic", "cans_per_event": 0},
+        {"scenario": "dynamic", "event_start": -1},
+        {"scenario": "dynamic", "event_interval": 0},
+        {"scenario": "dynamic", "max_steps": 750},  # the last party comes at step 750
+    ],
+)
+def test_invalid_party_parameters_rejected(kwargs):
+    with pytest.raises(ValueError):
+        SimulationConfig(**kwargs)
+
+
+def test_static_scenario_ignores_party_fields():
+    config = SimulationConfig(event_start=-1, event_interval=0, cans_per_event=0)
+    assert config.n_events == 0

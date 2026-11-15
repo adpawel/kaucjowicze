@@ -7,6 +7,7 @@ import pytest
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.experiments import (
     AGENTS_COLUMNS,
+    EVENTS_COLUMNS,
     RUNS_COLUMNS,
     TIMELINE_COLUMNS,
     VARIANTS,
@@ -88,6 +89,7 @@ def test_columns_follow_the_documented_format():
         "cans_min",
         "cans_max",
         "J",
+        "total_cans",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",
@@ -98,6 +100,20 @@ def test_columns_follow_the_documented_format():
         "agents_carrying",
     )
     assert AGENTS_COLUMNS == ("run_id", "agent_id", "cans", "path_length", "trips")
+    assert EVENTS_COLUMNS == (
+        "run_id",
+        "event_id",
+        "spawn_step",
+        "x",
+        "y",
+        "cans",
+        "overlap_share",
+        "latency_first",
+        "latency_50",
+        "latency_90",
+        "picked_up",
+        "agents_visited",
+    )
 
 
 def test_rows_have_exactly_the_documented_columns(tables):
@@ -113,6 +129,11 @@ def test_config_values_are_recorded(tables):
     assert row["k"] == SMALL.bag_capacity
     assert row["max_steps"] == SMALL.max_steps
     assert row["initial_cans"] == 12
+    assert row["total_cans"] == 12
+
+
+def test_static_scenario_has_no_parties(tables):
+    assert tables.events == []
 
 
 def test_only_trail_following_variant_reports_pheromone_parameters(tables):
@@ -191,7 +212,7 @@ def test_experiment_is_reproducible(tmp_path):
     write_tables(run_experiment(seeds=[2], config=SMALL), first)
     write_tables(run_experiment(seeds=[2], config=SMALL), second)
 
-    for name in ("runs.csv", "timeline.csv", "agents.csv"):
+    for name in ("runs.csv", "timeline.csv", "agents.csv", "events.csv"):
         assert (first / name).read_bytes() == (second / name).read_bytes()
 
 
@@ -246,3 +267,56 @@ def test_maps_have_separate_default_directories(tmp_path, monkeypatch):
     main(["--seeds", "1", "--max-steps", "2", "--map", "campus"])
     assert (tmp_path / "results" / "test" / "runs.csv").exists()
     assert (tmp_path / "results" / "campus" / "runs.csv").exists()
+
+
+DYNAMIC = SimulationConfig(
+    width=30,
+    height=20,
+    scenario="dynamic",
+    n_clusters=1,
+    cans_per_cluster=5,
+    n_background_cans=0,
+    n_events=2,
+    event_start=10,
+    event_interval=15,
+    n_agents=3,
+    max_steps=80,
+)
+
+
+@pytest.fixture(scope="module")
+def dynamic_tables():
+    return run_experiment(seeds=[0, 1], config=DYNAMIC)
+
+
+def test_dynamic_runs_record_their_scenario_and_every_party(dynamic_tables):
+    assert {row["scenario"] for row in dynamic_tables.runs} == {"dynamic"}
+    assert all(row["total_cans"] == 15 for row in dynamic_tables.runs)
+    assert all(row["initial_cans"] == 5 for row in dynamic_tables.runs)
+    assert all(tuple(row) == EVENTS_COLUMNS for row in dynamic_tables.events)
+    assert len(dynamic_tables.events) == 2 * len(dynamic_tables.runs)
+    assert {row["spawn_step"] for row in dynamic_tables.events} == {10, 25}
+
+
+def test_every_variant_gets_the_same_parties_for_a_seed(dynamic_tables):
+    seed_of = {row["run_id"]: row["seed"] for row in dynamic_tables.runs}
+    parties: dict[int, set] = {}
+    for row in dynamic_tables.events:
+        key = (row["event_id"], row["spawn_step"], row["x"], row["y"], row["cans"])
+        parties.setdefault(seed_of[row["run_id"]], set()).add(key)
+    assert all(len(found) == DYNAMIC.n_events for found in parties.values())
+    assert parties[0] != parties[1]
+
+
+def test_dynamic_scenario_has_its_own_default_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "1100", "--map", "test", "--scenario", "dynamic"])
+    output = tmp_path / "results" / "test_dynamic"
+    assert len(_read(output / "events.csv")) == 3 * len(VARIANTS)
+
+
+def test_command_line_rejects_a_limit_before_the_last_party(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--scenario", "dynamic", "--max-steps", "5", "--output", str(tmp_path)])
+    assert exc.value.code != 0
+    assert "party" in capsys.readouterr().err

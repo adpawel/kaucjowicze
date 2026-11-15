@@ -132,6 +132,11 @@ Porównujemy trzy podejścia do oceny jakości algorytmu:
 **Plik agentów (`agents.csv`):** jeden wiersz na agenta w przebiegu
 `run_id, agent_id, cans, path_length, trips`
 
+**Plik imprez (`events.csv`):** jeden wiersz na imprezę w przebiegu scenariusza dynamicznego (w statycznym sam nagłówek)
+`run_id, event_id, spawn_step, x, y, cans, overlap_share, latency_first, latency_50, latency_90, picked_up, agents_visited`
+
+W `runs.csv` kolumna `total_cans` to puszki z całego przebiegu (startowe i z imprez), a `initial_cans` tylko te ze startu. Progi t₅₀, t₉₀ i t₁₀₀ liczymy od `total_cans`.
+
 ## 8. Narzędzia
 
 | Narzędzie | Zastosowanie |

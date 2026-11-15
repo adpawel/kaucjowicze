@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from kaucjowicze.cans import SpawnEvent
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.factory import build_simulation
 from kaucjowicze.grid import Grid
@@ -165,3 +166,73 @@ def test_run_without_agents_has_no_per_agent_extremes():
     assert record.agents == []
     assert (record.cans_min, record.cans_max) == (None, None)
     assert record.gini == 0.0
+
+
+def _corridor_with_party(step: int, cans: int = 2) -> Simulation:
+    """The corridor of `_corridor_sim` without cans; they come with a party at `step`."""
+    grid = Grid(5, 1)
+    grid.add_base((0, 0))
+    config = SimulationConfig(
+        width=5, height=1, n_agents=1, bag_capacity=2, vision_radius=4, max_steps=100, seed=0
+    )
+    event = SpawnEvent(1, step, (2, 0), ((2, 0),) * cans)
+    rng = np.random.default_rng(0)
+    policy = RandomWalkPolicy(config.direction_persistence)
+    return Simulation(config, grid, policy, rng, events=[event])
+
+
+def test_party_latencies_of_a_known_run():
+    sim = _corridor_with_party(step=5)
+    for _ in range(5):
+        sim.step()
+    distance = abs(sim.agents[0].pos[0] - 2)  # the agent sees the whole corridor
+
+    record = record_run(sim)
+
+    assert record.initial_cans == 0
+    assert record.total_cans == 2
+    assert record.cans_collected == 2
+    (event,) = record.events
+    assert (event.event_id, event.spawn_step, event.x, event.y, event.cans) == (1, 5, 2, 0, 2)
+    # `distance` moves, then one pick-up per step
+    assert event.latency_first == event.latency_50 == distance + 1
+    assert event.latency_90 == distance + 2
+    assert (event.picked_up, event.agents_visited) == (2, 1)
+    assert event.overlap_share == 0.0
+
+
+def test_party_never_reached_has_no_latencies():
+    sim = _corridor_with_party(step=5)
+    sim.config = SimulationConfig(width=5, height=1, n_agents=1, max_steps=6)
+    record = record_run(sim)
+    (event,) = record.events
+    assert (event.latency_first, event.latency_50, event.latency_90) == (None, None, None)
+    assert event.picked_up == 0
+
+
+def test_party_at_or_after_the_limit_is_rejected():
+    grid = Grid(5, 1)
+    grid.add_base((0, 0))
+    config = SimulationConfig(width=5, height=1, n_agents=1, max_steps=10)
+    event = SpawnEvent(1, 10, (2, 0), ((2, 0),))
+    with pytest.raises(ValueError, match="step limit"):
+        Simulation(config, grid, RandomWalkPolicy(0.5), np.random.default_rng(0), events=[event])
+
+
+def test_thresholds_count_the_cans_of_every_party():
+    sim = _corridor_with_party(step=5)
+    record = record_run(sim)
+    collected = [row.cans_collected for row in record.timeline]
+    assert record.t_100 == collected.index(2)
+
+
+def test_overlap_counts_cans_landing_on_cans():
+    sim = _corridor_with_party(step=0)  # a party at step 0 lands on an empty corridor
+    assert sim.event_logs[0].overlap == 0
+    grid = Grid(5, 1)
+    grid.add_base((0, 0))
+    grid.add_can((2, 0))
+    config = SimulationConfig(width=5, height=1, n_agents=1, max_steps=10)
+    event = SpawnEvent(1, 0, (2, 0), ((2, 0), (3, 0)))
+    sim = Simulation(config, grid, RandomWalkPolicy(0.5), np.random.default_rng(0), events=[event])
+    assert sim.event_logs[0].overlap == 1

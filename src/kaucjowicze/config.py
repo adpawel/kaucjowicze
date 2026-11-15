@@ -5,19 +5,32 @@ from dataclasses import dataclass
 TEST_MAP = "test"
 CAMPUS_MAP = "campus"
 MAPS = (TEST_MAP, CAMPUS_MAP)
+STATIC = "static"
+DYNAMIC = "dynamic"
+SCENARIOS = (STATIC, DYNAMIC)
 MAP_DEFAULTS = {
     TEST_MAP: {
         "cans_per_cluster": 40,
         "cluster_spread": 3.0,
         "n_background_cans": 30,
         "max_steps": 3000,
+        "event_start": 250,
+        "event_interval": 250,
     },
     CAMPUS_MAP: {
         "cans_per_cluster": 45,
         "cluster_spread": 2.0,
         "n_background_cans": 0,
         "max_steps": 20000,
+        "event_start": 1000,
+        "event_interval": 1000,
     },
+}
+# The dynamic scenario starts with half of the clusters and adds the rest as parties during a run,
+# so the number of cans stays the same as in the static one
+SCENARIO_DEFAULTS = {
+    STATIC: {"n_clusters": 6, "n_events": 0},
+    DYNAMIC: {"n_clusters": 3, "n_events": 3},
 }
 
 
@@ -30,13 +43,22 @@ class SimulationConfig:
     width: int = 100
     height: int = 60
 
+    # Scenario
+    scenario: str = STATIC
+
     # Cans
-    n_clusters: int = 6
-    # `None` below stands for the value in `MAP_DEFAULTS`
+    # `None` below stands for the value in `SCENARIO_DEFAULTS` or `MAP_DEFAULTS`
+    n_clusters: int | None = None
     cans_per_cluster: int | None = None
     cluster_spread: float | None = None  # standard deviation of cans around a cluster centre
     n_background_cans: int | None = None  # cans scattered uniformly outside clusters
     cluster_dorm_distance: int = 4  # cluster centres lie this close to a dormitory, if any
+
+    # Parties (dynamic scenario): new clusters appear during a run
+    n_events: int | None = None
+    event_start: int | None = None  # step at which the first party leaves its cans
+    event_interval: int | None = None  # steps between consecutive parties
+    cans_per_event: int | None = None  # `None` means `cans_per_cluster`
 
     # Agents
     n_agents: int = 20
@@ -60,26 +82,55 @@ class SimulationConfig:
     # Reproducibility
     seed: int | None = None
 
+    @property
+    def last_event_step(self) -> int | None:
+        """Step of the last party; `None` without parties."""
+        if not self.n_events:
+            return None
+        return self.event_start + (self.n_events - 1) * self.event_interval
+
     def __post_init__(self) -> None:
         if self.map_name not in MAPS:
             raise ValueError(f"Unknown map: {self.map_name}")
-        for name, value in MAP_DEFAULTS[self.map_name].items():
-            if getattr(self, name) is None:  # the dataclass is frozen
-                object.__setattr__(self, name, value)
+        if self.scenario not in SCENARIOS:
+            raise ValueError(f"Unknown scenario: {self.scenario}")
+        for defaults in (SCENARIO_DEFAULTS[self.scenario], MAP_DEFAULTS[self.map_name]):
+            for name, value in defaults.items():
+                if getattr(self, name) is None:  # the dataclass is frozen
+                    object.__setattr__(self, name, value)
+        if self.cans_per_event is None:
+            object.__setattr__(self, "cans_per_event", self.cans_per_cluster)
         if self.cluster_dorm_distance < 1:  # dormitories are obstacles, so a centre is never on one
             raise ValueError("Cluster distance from a dormitory must be positive")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("Map dimensions must be positive")
         if self.bag_capacity <= 0:
             raise ValueError("Bag capacity must be positive")
-        if min(self.n_clusters, self.cans_per_cluster, self.n_background_cans, self.n_agents) < 0:
+        counts = (
+            self.n_clusters,
+            self.cans_per_cluster,
+            self.n_background_cans,
+            self.n_agents,
+            self.n_events,
+            self.cans_per_event,
+        )
+        if min(counts) < 0:
             raise ValueError("Counts must not be negative")
+        if self.n_events:  # a run without parties never reads their fields
+            if self.event_start < 0:
+                raise ValueError("First party must not start before the run")
+            if self.event_interval <= 0:
+                raise ValueError("Interval between parties must be positive")
+            if self.cans_per_event == 0:
+                raise ValueError("A party must leave at least one can")
         if self.vision_radius < 0:
             raise ValueError("Vision radius must not be negative")
         if self.return_patience <= 0:
             raise ValueError("Return patience must be positive")
         if self.max_steps <= 0:
             raise ValueError("Max steps must be positive")
+        if self.n_events and self.last_event_step >= self.max_steps:
+            raise ValueError("Every party must start before the step limit")
         if not 0.0 <= self.direction_persistence <= 1.0:
             raise ValueError("Direction persistence must be in [0, 1]")
         if self.trail_deposit < 0:
