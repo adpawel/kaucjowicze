@@ -24,6 +24,7 @@ from kaucjowicze.plots import (  # noqa: E402
     main,
     mean_ci,
     party_latencies,
+    report_text,
     significance_table,
     summary_table,
     write_report,
@@ -423,3 +424,24 @@ def test_sweep_report_replaces_the_other_comparisons(sweep_dir, result_dir, tmp_
     assert summary.startswith("# Number of agents (P5)")
     assert "Bonferroni" in summary
     assert "# Summary" not in summary
+
+
+def test_aco_advantage_uses_only_seeds_both_variants_ran_on():
+    runs = _sweep(
+        [
+            {"n_agents": 5, "variant": "random", "seed": 0, "t_90": 60.0},
+            {"n_agents": 5, "variant": "random", "seed": 1, "t_90": 90.0},
+            {"n_agents": 5, "variant": "aco/shared", "seed": 0, "t_90": 30.0},
+        ]
+    )
+    (row,) = aco_advantage(runs).to_dict("records")
+    assert row["ratio"] == pytest.approx(60 / 30)  # seed 1 has no ACO run, so it is left out
+    assert (row["aco_faster"], row["seeds"]) == (1, 1)
+
+
+def test_sweep_summary_names_the_scenario(sweep_dir):
+    summary = report_text(load_results(sweep_dir))
+    assert "Map: test. Scenario: static." in summary
+    advantage = summary.split("## Advantage")[1]
+    assert "| 2 | " in advantage and "| 4 | " in advantage  # counts stay integers
+    assert ".0/" not in advantage

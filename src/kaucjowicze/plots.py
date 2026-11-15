@@ -251,7 +251,7 @@ def agent_sweep_table(runs: pd.DataFrame) -> pd.DataFrame:
 
 def aco_advantage(runs: pd.DataFrame) -> pd.DataFrame:
     """Per number of agents: mean t_90 of the random walk over that of ACO N1, and on how many
-    seeds ACO N1 is faster. Both variants run on the same seeds, so seeds are paired.
+    seeds ACO N1 is faster. Both use only the seeds that both variants ran on.
     """
     faster, slower = P5_PAIR
     rows = []
@@ -267,7 +267,7 @@ def aco_advantage(runs: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "n_agents": int(n_agents),
-                "ratio": by_seed[slower].mean() / by_seed[faster].mean(),
+                "ratio": paired[slower].mean() / paired[faster].mean(),
                 "aco_faster": int((paired[faster] < paired[slower]).sum()),
                 "seeds": len(paired),
             }
@@ -447,6 +447,13 @@ def map_label(runs: pd.DataFrame) -> str:
     return ", ".join(sorted(runs["map"].unique()))
 
 
+def scenario_label(runs: pd.DataFrame) -> str:
+    """Scenario of the runs; with parties, t_90 counts their cans too."""
+    if "scenario" not in runs:
+        return "not recorded"
+    return ", ".join(sorted(runs["scenario"].unique()))
+
+
 def format_party_summary(results: Results) -> str:
     """P4 tables as Markdown."""
     table = _markdown_table(
@@ -493,21 +500,21 @@ def format_agent_summary(runs: pd.DataFrame) -> str:
         ("N", "Variant", "t_90", "Agent-steps N · t_90", "Gini", "Reached 90%"),
         (
             (
-                row["n_agents"],
-                row["variant"],
-                _with_ci(row["t_90_mean"], row["t_90_ci"], 0),
-                _with_ci(row["work_mean"], row["work_ci"], 0),
-                _with_ci(row["gini_mean"], row["gini_ci"], 3),
-                f"{row['t_90_reached']}/{row['runs']}",
+                row.n_agents,
+                row.variant,
+                _with_ci(row.t_90_mean, row.t_90_ci, 0),
+                _with_ci(row.work_mean, row.work_ci, 0),
+                _with_ci(row.gini_mean, row.gini_ci, 3),
+                f"{row.t_90_reached}/{row.runs}",
             )
-            for _, row in agent_sweep_table(runs).iterrows()
+            # itertuples keeps the integer columns integers, iterrows can make them floats
+            for row in agent_sweep_table(runs).itertuples()
         ),
     )
     advantage = _markdown_table(
         ("N", "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
         (
             (row.n_agents, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
-            # itertuples keeps the integer columns integers, iterrows would make them floats
             for row in aco_advantage(runs).itertuples()
         ),
     )
@@ -515,22 +522,22 @@ def format_agent_summary(runs: pd.DataFrame) -> str:
         ("N", "p-value", "Bonferroni threshold", "Significant"),
         (
             (
-                row["n_agents"],
-                f"{row['p_value']:.3g}",
-                f"{row['threshold']:.3g}",
-                "yes" if row["significant"] else "no",
+                row.n_agents,
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
             )
-            for _, row in agent_sweep_significance(runs).iterrows()
+            for row in agent_sweep_significance(runs).itertuples()
         ),
     )
     variant_a, variant_b = P5_PAIR
     return (
         "# Number of agents (P5)\n\n"
-        f"Map: {map_label(runs)}.\n\n"
+        f"Map: {map_label(runs)}. Scenario: {scenario_label(runs)}.\n\n"
         "Mean ± 95% confidence interval. A run below 90% counts as the step limit T.\n\n"
         f"{table}\n\n"
         "## Advantage of ACO N1\n\n"
-        "Ratio of the mean t_90 values; seeds are paired.\n\n"
+        "Ratio of the mean t_90 values over the seeds both variants ran on.\n\n"
         f"{advantage}\n\n"
         "## Significance\n\n"
         f"Two-sided Mann-Whitney test of t_90, {variant_a} vs {variant_b}, one test per N, "

@@ -368,3 +368,10 @@ def test_command_line_rejects_invalid_agent_counts(values, message, tmp_path, ca
         main(["--n-agents", *values, "--output", str(tmp_path)])
     assert exc.value.code != 0
     assert message in capsys.readouterr().err
+
+
+def test_one_count_other_than_the_default_never_replaces_the_default_results(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--n-agents", "3"])
+    assert (tmp_path / "results" / "test_agents" / "runs.csv").exists()
+    assert not (tmp_path / "results" / "test").exists()

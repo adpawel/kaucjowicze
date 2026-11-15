@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=None,
         help="output directory (default: results/<map>, with _dynamic for parties and _agents "
-        "for several --n-agents values)",
+        "for --n-agents other than the default)",
     )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
@@ -286,7 +286,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(str(error))
     seeds = range(args.first_seed, args.first_seed + args.seeds)
     folder = args.map if args.scenario == STATIC else f"{args.map}_{args.scenario}"
-    if len(args.n_agents) > 1:
+    # Any other count gets its own directory, so it never replaces the measurement at the default
+    if args.n_agents != [defaults.n_agents]:
         folder += "_agents"
     output = args.output or Path("results") / folder
     write_tables(run_agent_counts(seeds, args.n_agents, config, progress=report), output)

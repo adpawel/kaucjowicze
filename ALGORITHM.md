@@ -449,14 +449,14 @@ W tym pomiarze każda impreza została ruszona i osiągnęła 50%, więc żadna 
 | N | 5, 10, 20, 40, 80 | Kolejne wartości to podwojenia, więc 5 punktów pokrywa 16-krotny zakres. N = 20 to wartość domyślna |
 | Warianty, ziarna, T | te same co w punkcie 14: trzy warianty, ziarna 200–229, T = 20000 | Przy N = 20 przebiegi muszą być identyczne z punktem 14 (kontrola) |
 | Nakład pracy | `N · t₉₀`, czyli kroki agentów do zebrania 90% puszek | Jeśli rośnie razem z N, każdy kolejny agent daje mniej, czyli tłok szkodzi |
-| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich, oraz na ilu ziarnach N1 jest szybsze (ziarna sparowane) | |
+| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich oraz liczba ziaren, na których N1 jest szybsze. Obie wartości liczymy tylko na ziarnach, które przeszły oba warianty | Stosunek i liczba ziaren opisują wtedy tę samą próbkę. W pomiarze każde ziarno ma oba warianty, więc wynik jest taki sam jak ze wszystkich przebiegów |
 | Testy | tylko t₉₀ ACO N1 / losowy spacer, osobno dla każdego N, Mann-Whitney dwustronny, Bonferroni na 5 testów (próg 0.01) | Mało testów, wybranych przed pomiarem. N2 i Gini podajemy tylko opisowo |
 
 **Hipotezy:**
 1. t₉₀ maleje z N we wszystkich wariantach, a nakład w ACO zaczyna rosnąć przy mniejszym N niż w losowym spacerze, bo ślad ściąga agentów do tych samych skupisk.
 2. Przewaga ACO jest mała przy N = 5 (mało śladu), największa przy średnich N i słabnie przy N = 80 (gęsto rozstawieni agenci znajdują skupiska nawet bez śladu).
 
-**Kod:** `--n-agents` w `experiments.py` przyjmuje kilka wartości i zapisuje wszystkie przebiegi do jednego katalogu (`results/<mapa>_agents`). Gdy w danych jest więcej niż jedno N, `plots.py` robi tylko raport P5, bo P1, P2 i P4 mieszałyby przebiegi różnej wielkości.
+**Kod:** `--n-agents` w `experiments.py` przyjmuje kilka wartości i zapisuje wszystkie przebiegi do jednego katalogu (`results/<mapa>_agents`). Do tego katalogu trafia też pojedyncza wartość inna niż domyślna, żeby nie nadpisać pomiaru z punktu 14. Raport P5 podaje mapę i scenariusz, bo w scenariuszu dynamicznym t₉₀ liczy też puszki z imprez. Gdy w danych jest więcej niż jedno N, `plots.py` robi tylko raport P5, bo P1, P2 i P4 mieszałyby przebiegi różnej wielkości.
 
 ### Wyniki
 
