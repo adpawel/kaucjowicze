@@ -2,7 +2,7 @@
 
 Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15.
 
-**Stan:** zmiany są na gałęzi `adpawel/feat/dynamic-scenario` (PR #15) i nie są jeszcze scalone z `master`.
+**Stan:** scenariusz dynamiczny jest scalony z `master` (PR #15). Porównanie P5 (liczba agentów) jest na gałęzi `adpawel/feat/agent-count`.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -11,7 +11,7 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 | Kierunek | Stan |
 |---|---|
 | nagroda, która zmienia ilość zostawianego śladu, i cel J | nie zaczęte (plan w `NAGRODY.md`, porównanie P3) |
-| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | nie zaczęte |
+| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, pozostałe parametry nie zaczęte |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
 | populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
 
@@ -92,4 +92,5 @@ python -m kaucjowicze --algorithm aco --map campus --scenario dynamic --seed 200
 ## Co zostało do zrobienia
 
 - metryka przywiązania do wyczerpanych skupisk w P4: ile czasu agenci spędzają przy pustych źródłach,
-- pozostałe trzy kierunki z tabeli na początku pliku.
+- analiza wrażliwości na ρ, α, ε, worek i promień widzenia,
+- pozostałe dwa kierunki z tabeli na początku pliku.
