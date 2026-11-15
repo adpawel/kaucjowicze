@@ -10,7 +10,10 @@ from kaucjowicze.grid import Grid, Position
 
 @dataclass(frozen=True)
 class SpawnEvent:
-    """A party: at the start of step `step` one can lands on each of `cells` (repeats allowed)."""
+    """A party: one can lands on each of `cells` (repeats allowed) once `step` steps are done.
+
+    The `timeline.csv` row of `step` already shows them, and the first pick-up is at `step + 1`.
+    """
 
     id: int  # 1, 2, ...; 0 stands for the cans present from the start
     step: int

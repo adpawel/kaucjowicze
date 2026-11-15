@@ -377,7 +377,7 @@ W scenariuszu statycznym N1 i N2 są równie szybkie (punkt 14). Scenariusz stat
 - **Środki imprez losujemy tą samą regułą co skupiska** (blisko akademika, punkt 13), z tym samym rozrzutem σ.
 - **Odstęp 1000 kroków** sprawdziliśmy na osobnych ziarnach 100–109. W ACO i N2 przed kolejną imprezą zostaje na mapie średnio 9–17 puszek z poprzedniej fali, więc fale prawie się nie nakładają. Losowy spacer nie nadąża (61–71 puszek), ale to cecha wariantu, a nie skali czasu.
 - **Koniec przebiegu:** wszystkie imprezy już się pojawiły i oddano wszystkie puszki, albo limit T. Progi t₅₀, t₉₀ i t₁₀₀ liczymy od wszystkich puszek przebiegu (`total_cans` w `runs.csv`).
-- **Ostatnia impreza musi przyjść przed limitem T**, inaczej konfiguracja jest odrzucana.
+- **Ostatnia impreza musi przyjść przed limitem T**, a impreza musi mieć co najmniej jedną puszkę. Inaczej odrzuca je konfiguracja, a limit T sprawdza też sama symulacja, gdy dostaje imprezy bezpośrednio. W scenariuszu statycznym pól imprez nie sprawdzamy, bo nie są używane.
 
 ### Te same imprezy dla każdego wariantu
 
@@ -399,7 +399,7 @@ Puszki imprezy mierzymy przy **podniesieniu**, a nie oddaniu, bo worek miesza pu
 | `agents_visited` | ilu różnych agentów podniosło z niej co najmniej jedną puszkę |
 | `overlap_share` | odsetek jej puszek, które spadły na komórkę z puszkami |
 
-W porównaniu każdy przebieg to jedna obserwacja: średnia z jego trzech imprez. Impreza, która do limitu T nie osiągnęła 50%, liczy się jako `T − krok imprezy`. Test Manna-Whitneya dwustronny, bez korekty, tak jak w punkcie 11.
+W porównaniu każdy przebieg to jedna obserwacja: średnia z jego trzech imprez. Impreza, z której do limitu T nikt nic nie podniósł albo która nie osiągnęła 50%, liczy się w danej kolumnie jako `T − krok imprezy`. Obie kolumny są więc średnimi z tych samych imprez, a impreza, do której nikt nie dotarł, nie poprawia wyniku przez pominięcie. Test Manna-Whitneya dwustronny, bez korekty, tak jak w punkcie 11.
 
 **Nie wdrożyliśmy** metryki przywiązania do wyczerpanych skupisk (czas agentów spędzony przy pustych źródłach). Zostaje na później.
 
@@ -427,7 +427,7 @@ Pomiar z 15 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --firs
 | ACO N1 | 620 | 531 | 440 |
 | N2 | 639 | 382 | 980 |
 
-Na komórki z puszkami spadło średnio 0–1.2% puszek imprezy (najwięcej 53% w jednej imprezie), więc przypisanie FIFO prawie nie wpływa na wyniki.
+W tym pomiarze każda impreza została ruszona i osiągnęła 50%, więc żadna wartość nie jest cenzurowana. Na komórki z puszkami spadło średnio 0–1.2% puszek imprezy (najwięcej 53% w jednej imprezie), więc przypisanie FIFO prawie nie wpływa na wyniki.
 
 **Wnioski:**
 

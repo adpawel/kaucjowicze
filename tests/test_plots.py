@@ -10,6 +10,8 @@ from kaucjowicze.config import SimulationConfig  # noqa: E402
 from kaucjowicze.experiments import run_experiment, write_tables  # noqa: E402
 from kaucjowicze.plots import (  # noqa: E402
     Results,
+    _percent,
+    _with_ci,
     censored,
     collection_curves,
     curve_band,
@@ -286,7 +288,7 @@ def test_party_latencies_have_one_row_per_run(dynamic_dir):
     assert (per_run["parties"] == 2).all()
 
 
-def test_party_below_half_counts_the_steps_it_had():
+def test_party_never_reached_counts_the_steps_it_had():
     runs = pd.DataFrame([{"run_id": 0, "variant": "random", "max_steps": 100}])
     events = pd.DataFrame(
         [
@@ -313,7 +315,15 @@ def test_party_below_half_counts_the_steps_it_had():
     results = Results(runs, pd.DataFrame(), pd.DataFrame(), events)
     (row,) = party_latencies(results).to_dict("records")
     assert row["latency_50"] == pytest.approx((10 + 40) / 2)
+    # the first pick-up is censored the same way, so both means cover the same parties
+    assert row["latency_first"] == pytest.approx((5 + 40) / 2)
     assert row["reached_50"] == 1
+
+
+def test_missing_values_are_shown_as_not_available():
+    assert _with_ci(float("nan"), float("nan"), 0) == "n/a"
+    assert _percent(float("nan")) == "n/a"
+    assert _percent(0.125) == "12.5%"
 
 
 def test_results_without_party_file_still_load(result_dir, tmp_path):

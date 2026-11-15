@@ -37,6 +37,8 @@ class CanLedger:
     """Which source each can on the map comes from: 0 for the start, then the party ids.
 
     A pick-up takes the oldest can on the cell, so a party never looks faster than it was.
+    It knows the cans on the grid when it is made and those of parties; a can added to the grid
+    in any other way is not traced, and a pick-up of it may be charged to the wrong source.
     """
 
     def __init__(self, grid: Grid, n_events: int) -> None:
@@ -92,6 +94,8 @@ class Simulation:
         self.events = sorted(events, key=lambda event: event.step)
         if [event.id for event in self.events] != list(range(1, len(self.events) + 1)):
             raise ValueError("Party ids must be 1, 2, ... in the order of their steps")
+        if self.events and self.events[-1].step >= config.max_steps:
+            raise ValueError("Every party must start before the step limit")
         self.event_logs = [EventLog(event) for event in self.events]
         self.events_spawned = 0
         self.ledger = CanLedger(grid, len(self.events))

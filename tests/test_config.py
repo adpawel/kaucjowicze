@@ -115,6 +115,7 @@ def test_scenario_defaults_can_be_overridden():
         {"scenario": "party"},
         {"scenario": "dynamic", "n_events": -1},
         {"scenario": "dynamic", "cans_per_event": -1},
+        {"scenario": "dynamic", "cans_per_event": 0},
         {"scenario": "dynamic", "event_start": -1},
         {"scenario": "dynamic", "event_interval": 0},
         {"scenario": "dynamic", "max_steps": 750},  # the last party comes at step 750
@@ -123,3 +124,8 @@ def test_scenario_defaults_can_be_overridden():
 def test_invalid_party_parameters_rejected(kwargs):
     with pytest.raises(ValueError):
         SimulationConfig(**kwargs)
+
+
+def test_static_scenario_ignores_party_fields():
+    config = SimulationConfig(event_start=-1, event_interval=0, cans_per_event=0)
+    assert config.n_events == 0

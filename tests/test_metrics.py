@@ -210,10 +210,13 @@ def test_party_never_reached_has_no_latencies():
     assert event.picked_up == 0
 
 
-def test_party_after_the_limit_is_not_recorded():
-    sim = _corridor_with_party(step=50)
-    sim.config = SimulationConfig(width=5, height=1, n_agents=1, max_steps=10)
-    assert record_run(sim).events == []
+def test_party_at_or_after_the_limit_is_rejected():
+    grid = Grid(5, 1)
+    grid.add_base((0, 0))
+    config = SimulationConfig(width=5, height=1, n_agents=1, max_steps=10)
+    event = SpawnEvent(1, 10, (2, 0), ((2, 0),))
+    with pytest.raises(ValueError, match="step limit"):
+        Simulation(config, grid, RandomWalkPolicy(0.5), np.random.default_rng(0), events=[event])
 
 
 def test_thresholds_count_the_cans_of_every_party():

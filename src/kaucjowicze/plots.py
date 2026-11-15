@@ -164,11 +164,14 @@ def has_parties(results: Results) -> bool:
 def party_latencies(results: Results) -> pd.DataFrame:
     """One row per run: its mean over parties, so each run counts as one observation.
 
-    A party below 50% by the step limit counts as the steps it had, from its start to T.
+    A party not picked from, or below 50%, by the step limit counts as the steps it had, from
+    its start to T, so both latencies are averaged over the same parties.
     """
     events = results.events.merge(results.runs[["run_id", "variant", "max_steps"]], on="run_id")
     events["reached_50"] = events["latency_50"].notna()
-    events["latency_50"] = events["latency_50"].fillna(events["max_steps"] - events["spawn_step"])
+    steps_had = events["max_steps"] - events["spawn_step"]
+    for column in ("latency_first", "latency_50"):
+        events[column] = events[column].fillna(steps_had)
     return events.groupby(["run_id", "variant"], as_index=False).agg(
         latency_first=("latency_first", "mean"),
         latency_50=("latency_50", "mean"),
@@ -232,9 +235,14 @@ def plot_collection_curves(
     results: Results, variants: Sequence[str], title: str, path: Path
 ) -> None:
     """Mean curve with its 95% band for each variant."""
-    curves = collection_curves(results)
     figure = Figure(figsize=(8, 4.5), layout="constrained")
     axes = _style_axes(figure, title, "Step", "Cans delivered to the base")
+    _plot_bands(axes, results, collection_curves(results), variants, legend="lower right")
+    figure.savefig(path, dpi=150)
+
+
+def _plot_bands(axes, results: Results, curves: pd.DataFrame, variants, legend: str) -> None:
+    """Mean curve of each variant with its 95% band; `curves` has one column per run."""
     for variant in variants:
         run_ids = results.runs.loc[results.runs["variant"] == variant, "run_id"]
         band = curve_band(curves[run_ids.tolist()])
@@ -243,8 +251,7 @@ def plot_collection_curves(
         axes.plot(band.index, band["mean"], color=color, linewidth=2, label=LABELS[variant])
     axes.set_xlim(left=0)
     axes.set_ylim(bottom=0)
-    axes.legend(frameon=False, loc="lower right", labelcolor=TEXT_PRIMARY)
-    figure.savefig(path, dpi=150)
+    axes.legend(frameon=False, loc=legend, labelcolor=TEXT_PRIMARY)
 
 
 def plot_cans_per_agent(results: Results, variants: Sequence[str], title: str, path: Path) -> None:
@@ -270,15 +277,7 @@ def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path
     axes = _style_axes(figure, title, "Step", "Cans on the map")
     for step in sorted(results.events["spawn_step"].unique()):
         axes.axvline(step, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
-    for variant in variants:
-        run_ids = results.runs.loc[results.runs["variant"] == variant, "run_id"]
-        band = curve_band(curves[run_ids.tolist()])
-        color = COLORS[variant]
-        axes.fill_between(band.index, band["low"], band["high"], color=color, alpha=0.18, lw=0)
-        axes.plot(band.index, band["mean"], color=color, linewidth=2, label=LABELS[variant])
-    axes.set_xlim(left=0)
-    axes.set_ylim(bottom=0)
-    axes.legend(frameon=False, loc="upper right", labelcolor=TEXT_PRIMARY)
+    _plot_bands(axes, results, curves, variants, legend="upper right")
     figure.savefig(path, dpi=150)
 
 
@@ -305,9 +304,15 @@ def _box_plot(
 
 
 def _with_ci(mean: float, half_width: float, digits: int) -> str:
+    if np.isnan(mean):
+        return "n/a"
     if np.isnan(half_width):
         return f"{mean:.{digits}f}"
     return f"{mean:.{digits}f} ± {half_width:.{digits}f}"
+
+
+def _percent(share: float) -> str:
+    return "n/a" if np.isnan(share) else f"{100 * share:.1f}%"
 
 
 def _markdown_table(header: Sequence[str], rows: Iterable[Sequence[object]]) -> str:
@@ -341,7 +346,7 @@ def format_party_summary(results: Results) -> str:
                 _with_ci(row["latency_50_mean"], row["latency_50_ci"], 0),
                 _with_ci(row["agents_visited_mean"], row["agents_visited_ci"], 1),
                 f"{row['reached_50']}/{row['parties']}",
-                f"{100 * row['overlap_share_mean']:.1f}%",
+                _percent(row["overlap_share_mean"]),
             )
             for _, row in party_table(results).iterrows()
         ),
@@ -356,7 +361,7 @@ def format_party_summary(results: Results) -> str:
     return (
         "## Parties (P4)\n\n"
         "Mean over the parties of a run, then mean ± 95% interval over runs. Steps count from a "
-        "party to a pick-up. A party below 50% by the limit counts as the steps it had.\n\n"
+        "party to a pick-up. A party not reached by the limit counts as the steps it had.\n\n"
         f"{table}\n\n"
         "Two-sided Mann-Whitney test of the per-run means, no correction.\n\n"
         f"{significance}\n"

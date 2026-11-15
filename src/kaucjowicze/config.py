@@ -116,10 +116,13 @@ class SimulationConfig:
         )
         if min(counts) < 0:
             raise ValueError("Counts must not be negative")
-        if self.event_start < 0:
-            raise ValueError("First party must not start before the run")
-        if self.event_interval <= 0:
-            raise ValueError("Interval between parties must be positive")
+        if self.n_events:  # a run without parties never reads their fields
+            if self.event_start < 0:
+                raise ValueError("First party must not start before the run")
+            if self.event_interval <= 0:
+                raise ValueError("Interval between parties must be positive")
+            if self.cans_per_event == 0:
+                raise ValueError("A party must leave at least one can")
         if self.vision_radius < 0:
             raise ValueError("Vision radius must not be negative")
         if self.return_patience <= 0:
