@@ -16,6 +16,7 @@ from kaucjowicze.plots import (  # noqa: E402
     agent_sweep_significance,
     agent_sweep_table,
     censored,
+    check_layout_inputs,
     collection_curves,
     combine_results,
     curve_band,
@@ -503,7 +504,7 @@ def test_layout_tests_are_paired_by_seed_with_bonferroni_over_all():
         ["uniform", "t_90"],
         ["uniform", "gini"],
     ]
-    assert (table["threshold"] == 0.05 / 4).all()
+    assert (table["threshold"] == 0.05 / 8).all()  # all 8 planned tests, not the 4 run here
     assert (table["pairs"] == 10).all()
     t_90 = table[table["metric"] == "t_90"]
     assert t_90["significant"].all()  # an unpaired test would not see this difference
@@ -577,3 +578,16 @@ def test_several_inputs_must_be_different_layouts(layout_dirs, result_dir, tmp_p
             main(["--input", *map(str, inputs), "--output", str(tmp_path)])
         assert exc.value.code != 0
         assert "layout" in capsys.readouterr().err
+
+
+def test_layout_inputs_must_differ_only_in_the_layout(layout_dirs, result_dir, tmp_path):
+    parts = [load_results(directory) for directory in layout_dirs]
+    assert check_layout_inputs(parts) is None
+
+    other_limit = SimulationConfig(width=30, height=20, n_agents=3, max_steps=90, layout="current")
+    write_tables(run_experiment(seeds=[0], config=other_limit), tmp_path / "current")
+    assert "max_steps" in check_layout_inputs([*parts, load_results(tmp_path / "current")])
+
+    without_layout = load_results(result_dir)  # e.g. results/campus or results/campus_agents
+    assert "one --layout" in check_layout_inputs([parts[0], without_layout])
+    assert "different" in check_layout_inputs([parts[0], parts[0]])

@@ -158,9 +158,17 @@ def test_layout_sets_its_counts_and_survives_replace(name):
     [
         ({"layout": "nope"}, "Unknown layout"),
         ({"layout": "uniform", "scenario": "dynamic"}, "static"),
-        ({"layout": "few-large", "n_clusters": 3}, "n_clusters"),
     ],
 )
 def test_invalid_layouts_rejected(kwargs, message):
     with pytest.raises(ValueError, match=message):
         SimulationConfig(**kwargs)
+
+
+def test_layout_replaces_counts_already_set():
+    campus = SimulationConfig(map_name="campus")  # n_clusters is 6 here already
+    few = replace(campus, layout="few-large")
+    assert (few.n_clusters, few.cans_per_cluster) == (2, 135)
+    uniform = replace(few, layout="uniform")
+    assert (uniform.n_clusters, uniform.n_background_cans) == (0, 270)
+    assert SimulationConfig(layout="few-large", n_clusters=3).n_clusters == 2

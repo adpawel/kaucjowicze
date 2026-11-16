@@ -56,7 +56,8 @@ class SimulationConfig:
     # Scenario
     scenario: str = STATIC
 
-    # Can layout: a name from `LAYOUTS` sets the cluster and background counts, `None` keeps them
+    # Can layout: a name from `LAYOUTS` sets the cluster and background counts, replacing any
+    # given with it; `None` keeps them
     layout: str | None = None
 
     # Cans
@@ -107,10 +108,9 @@ class SimulationConfig:
             raise ValueError(f"Unknown layout: {self.layout}")
         if self.scenario != STATIC:  # parties would add clusters the layout does not have
             raise ValueError("A layout applies only to the static scenario")
+        # The layout always wins: `replace` passes back counts already filled in from the defaults
+        # or another layout, and those cannot be told apart from counts given on purpose
         for name, value in LAYOUTS[self.layout].items():
-            # `replace` passes the value set here back in, so only another value is a conflict
-            if getattr(self, name) not in (None, value):
-                raise ValueError(f"Layout {self.layout} sets {name} to {value}")
             object.__setattr__(self, name, value)  # the dataclass is frozen
 
     def __post_init__(self) -> None:

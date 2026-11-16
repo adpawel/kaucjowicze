@@ -399,9 +399,31 @@ def layout_significance(runs: pd.DataFrame) -> pd.DataFrame:
                 {"layout": layout, "metric": metric, "pairs": len(paired), "p_value": p_value}
             )
     table = pd.DataFrame(rows, columns=["layout", "metric", "pairs", "p_value"])
-    table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
+    # The number of tests is fixed by the plan, so a missing layout does not loosen the threshold
+    table["threshold"] = SIGNIFICANCE_LEVEL / (len(LAYOUTS) * len(P6_METRICS))
     table["significant"] = table["p_value"] < table["threshold"]
     return table
+
+
+def check_layout_inputs(parts: Sequence[Results]) -> str | None:
+    """Why the directories cannot form comparison P6, or `None` when they can.
+
+    Each must hold one named layout, a different one, and all must share the map, scenario,
+    number of agents and step limit, so that only the layout differs.
+    """
+    layouts = []
+    for part in parts:
+        found = set(part.runs["layout"].dropna()) if "layout" in part.runs else set()
+        if len(found) != 1 or part.runs["layout"].isna().any():
+            return "each --input directory must hold the runs of one --layout"
+        layouts += found
+    if len(set(layouts)) != len(layouts):
+        return "each --input directory must hold a different layout"
+    for column in ("map", "scenario", "n_agents", "max_steps"):
+        values = pd.concat([part.runs[column] for part in parts if column in part.runs])
+        if values.nunique(dropna=False) > 1:
+            return f"the --input directories differ in {column}, not only in the layout"
+    return None
 
 
 def _style_axes(figure: Figure, title: str, xlabel: str, ylabel: str):
@@ -910,11 +932,10 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("--output is required with several --input directories")
 
     parts = [load_results(directory) for directory in args.input]
-    if len(parts) > 1:
-        # Joining directories only makes sense for layouts, and each must come once
-        layouts = [set(with_layout(part.runs)["layout"]) for part in parts]
-        if any(len(found) != 1 for found in layouts) or len(set().union(*layouts)) != len(parts):
-            parser.error("several --input directories must each hold one different layout")
+    if len(parts) > 1:  # joining directories only makes sense for layouts
+        problem = check_layout_inputs(parts)
+        if problem is not None:
+            parser.error(problem)
     results = parts[0] if len(parts) == 1 else combine_results(parts)
     output = args.output or args.input[0] / "figures"
     write_report(results, output)
