@@ -32,6 +32,16 @@ SCENARIO_DEFAULTS = {
     STATIC: {"n_clusters": 6, "n_events": 0},
     DYNAMIC: {"n_clusters": 3, "n_events": 3},
 }
+# Named can layouts of comparison P6, all with 270 cans, from the most to the least clustered.
+# Only these combinations exist, so a run never mixes counts that were not planned.
+# `current` is the default static layout of the campus map
+CURRENT_LAYOUT = "current"
+LAYOUTS = {
+    "few-large": {"n_clusters": 2, "cans_per_cluster": 135, "n_background_cans": 0},
+    CURRENT_LAYOUT: {"n_clusters": 6, "cans_per_cluster": 45, "n_background_cans": 0},
+    "many-small": {"n_clusters": 18, "cans_per_cluster": 15, "n_background_cans": 0},
+    "uniform": {"n_clusters": 0, "cans_per_cluster": 0, "n_background_cans": 270},
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,9 @@ class SimulationConfig:
 
     # Scenario
     scenario: str = STATIC
+
+    # Can layout: a name from `LAYOUTS` sets the cluster and background counts, `None` keeps them
+    layout: str | None = None
 
     # Cans
     # `None` below stands for the value in `SCENARIO_DEFAULTS` or `MAP_DEFAULTS`
@@ -89,11 +102,24 @@ class SimulationConfig:
             return None
         return self.event_start + (self.n_events - 1) * self.event_interval
 
+    def _apply_layout(self) -> None:
+        if self.layout not in LAYOUTS:
+            raise ValueError(f"Unknown layout: {self.layout}")
+        if self.scenario != STATIC:  # parties would add clusters the layout does not have
+            raise ValueError("A layout applies only to the static scenario")
+        for name, value in LAYOUTS[self.layout].items():
+            # `replace` passes the value set here back in, so only another value is a conflict
+            if getattr(self, name) not in (None, value):
+                raise ValueError(f"Layout {self.layout} sets {name} to {value}")
+            object.__setattr__(self, name, value)  # the dataclass is frozen
+
     def __post_init__(self) -> None:
         if self.map_name not in MAPS:
             raise ValueError(f"Unknown map: {self.map_name}")
         if self.scenario not in SCENARIOS:
             raise ValueError(f"Unknown scenario: {self.scenario}")
+        if self.layout is not None:
+            self._apply_layout()
         for defaults in (SCENARIO_DEFAULTS[self.scenario], MAP_DEFAULTS[self.map_name]):
             for name, value in defaults.items():
                 if getattr(self, name) is None:  # the dataclass is frozen

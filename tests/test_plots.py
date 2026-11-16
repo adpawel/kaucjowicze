@@ -17,9 +17,14 @@ from kaucjowicze.plots import (  # noqa: E402
     agent_sweep_table,
     censored,
     collection_curves,
+    combine_results,
     curve_band,
     format_summary,
     has_agent_sweep,
+    has_layout_sweep,
+    layout_order,
+    layout_significance,
+    layout_table,
     load_results,
     main,
     mean_ci,
@@ -445,3 +450,130 @@ def test_sweep_summary_names_the_scenario(sweep_dir):
     advantage = summary.split("## Advantage")[1]
     assert "| 2 | " in advantage and "| 4 | " in advantage  # counts stay integers
     assert ".0/" not in advantage
+
+
+def _layouts(rows: list[dict]) -> pd.DataFrame:
+    """Runs of the layout comparison: `t_90` and `gini` given per (layout, variant, seed)."""
+    return _runs([{"run_id": i, **row} for i, row in enumerate(rows)])
+
+
+def test_layouts_are_ordered_from_the_most_clustered():
+    runs = _layouts([{"layout": name} for name in ("uniform", "current", "few-large", "odd")])
+    assert layout_order(runs) == ["few-large", "current", "uniform", "odd"]
+
+
+def test_layout_table_has_a_row_per_layout_and_variant():
+    runs = _layouts(
+        [
+            {"layout": layout, "variant": variant, "seed": seed, "t_90": t_90}
+            for layout in ("uniform", "few-large")
+            for variant in ("aco/shared", "random")
+            for seed, t_90 in enumerate((40.0, None))
+        ]
+    )
+    table = layout_table(runs)
+
+    assert list(zip(table["layout"], table["variant"], strict=True)) == [
+        ("few-large", "random"),
+        ("few-large", "aco/shared"),
+        ("uniform", "random"),
+        ("uniform", "aco/shared"),
+    ]
+    assert table.loc[0, "t_90_mean"] == pytest.approx((40 + 100) / 2)  # unreached counts as T
+    assert table.loc[0, "t_90_reached"] == 1
+
+
+def test_layout_tests_are_paired_by_seed_with_bonferroni_over_all():
+    rows = []
+    for layout in ("few-large", "uniform"):
+        for seed in range(10):
+            # ACO is faster on every seed, although the two samples overlap almost entirely
+            rows.append(
+                {"layout": layout, "variant": "random", "seed": seed, "t_90": 10.0 * seed + 5}
+            )
+            rows.append(
+                {"layout": layout, "variant": "aco/shared", "seed": seed, "t_90": 10.0 * seed}
+            )
+            rows[-1]["gini"] = rows[-2]["gini"] = 0.5  # no difference at all
+    table = layout_significance(_layouts(rows))
+
+    assert table[["layout", "metric"]].values.tolist() == [
+        ["few-large", "t_90"],
+        ["few-large", "gini"],
+        ["uniform", "t_90"],
+        ["uniform", "gini"],
+    ]
+    assert (table["threshold"] == 0.05 / 4).all()
+    assert (table["pairs"] == 10).all()
+    t_90 = table[table["metric"] == "t_90"]
+    assert t_90["significant"].all()  # an unpaired test would not see this difference
+    assert (table.loc[table["metric"] == "gini", "p_value"] == 1.0).all()
+
+
+def test_aco_advantage_by_layout():
+    runs = _layouts(
+        [
+            {"layout": "uniform", "variant": "random", "seed": 0, "t_90": 60.0},
+            {"layout": "uniform", "variant": "aco/shared", "seed": 0, "t_90": 30.0},
+            {"layout": "few-large", "variant": "random", "seed": 0, "t_90": 90.0},
+            {"layout": "few-large", "variant": "aco/shared", "seed": 0, "t_90": 30.0},
+        ]
+    )
+    table = aco_advantage(runs, by="layout")
+    assert table["layout"].tolist() == ["few-large", "uniform"]
+    assert table["ratio"].tolist() == pytest.approx([3.0, 2.0])
+
+
+@pytest.fixture(scope="module")
+def layout_dirs(tmp_path_factory):
+    dirs = []
+    for name in ("few-large", "uniform"):
+        config = SimulationConfig(width=30, height=20, n_agents=3, max_steps=150, layout=name)
+        output = tmp_path_factory.mktemp(name)
+        write_tables(run_experiment(seeds=[0, 1, 2], config=config), output)
+        dirs.append(output)
+    return dirs
+
+
+def test_combined_layouts_keep_run_ids_apart(layout_dirs):
+    parts = [load_results(directory) for directory in layout_dirs]
+    results = combine_results(parts)
+
+    assert results.runs["run_id"].is_unique
+    assert len(results.runs) == sum(len(part.runs) for part in parts)
+    assert set(results.timeline["run_id"]) == set(results.runs["run_id"])
+    assert set(results.agents["run_id"]) == set(results.runs["run_id"])
+    assert has_layout_sweep(results)
+    assert not has_layout_sweep(parts[0])
+
+
+def test_layout_report_replaces_the_other_comparisons(layout_dirs, tmp_path, capsys):
+    main(["--input", *map(str, layout_dirs), "--output", str(tmp_path)])
+
+    names = {path.name for path in tmp_path.iterdir()}
+    assert names == {
+        "p6_t90_by_layout.png",
+        "p6_gini_by_layout.png",
+        "p6_aco_advantage.png",
+        "summary.md",
+    }
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert summary.startswith("# Can layout (P6)")
+    assert "Wilcoxon" in summary
+    assert "# Summary" not in summary
+    assert "Can layout (P6)" in capsys.readouterr().out
+
+
+def test_several_inputs_need_an_output(layout_dirs, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--input", *map(str, layout_dirs)])
+    assert exc.value.code != 0
+    assert "--output" in capsys.readouterr().err
+
+
+def test_several_inputs_must_be_different_layouts(layout_dirs, result_dir, tmp_path, capsys):
+    for inputs in ([layout_dirs[0], layout_dirs[0]], [result_dir, result_dir]):
+        with pytest.raises(SystemExit) as exc:
+            main(["--input", *map(str, inputs), "--output", str(tmp_path)])
+        assert exc.value.code != 0
+        assert "layout" in capsys.readouterr().err

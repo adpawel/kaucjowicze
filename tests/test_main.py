@@ -188,3 +188,24 @@ def test_dynamic_scenario_runs_from_command_line(capsys):
     output = capsys.readouterr().out
     collected = next(line for line in output.splitlines() if line.startswith("Collected"))
     assert collected.endswith("/270 cans")  # 3 clusters at the start and 3 parties of 40 + 30
+
+
+def test_layout_runs_from_command_line(capsys):
+    main(["--seed", "0", "--map", "campus", "--layout", "uniform"])
+    output = capsys.readouterr().out
+    assert "/270 cans" in output
+
+
+def test_layout_with_parties_is_a_usage_error(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--layout", "few-large", "--scenario", "dynamic"])
+    assert exc.value.code != 0
+    assert "static" in capsys.readouterr().err
+
+
+def test_window_gets_the_chosen_layout(monkeypatch):
+    calls = _fake_gui(monkeypatch)
+    main(["--gui", "--seed", "1", "--map", "campus", "--layout", "many-small"])
+    sim = calls[0]["make_sim"]()
+    assert sim.config.layout == "many-small"
+    assert sim.config.n_clusters == 18

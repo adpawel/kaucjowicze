@@ -1,6 +1,8 @@
+from dataclasses import replace
+
 import pytest
 
-from kaucjowicze.config import SimulationConfig
+from kaucjowicze.config import CURRENT_LAYOUT, LAYOUTS, SimulationConfig
 
 
 def test_default_agent_parameters_match_milestones():
@@ -129,3 +131,36 @@ def test_invalid_party_parameters_rejected(kwargs):
 def test_static_scenario_ignores_party_fields():
     config = SimulationConfig(event_start=-1, event_interval=0, cans_per_event=0)
     assert config.n_events == 0
+
+
+def test_every_layout_has_the_same_number_of_cans():
+    for counts in LAYOUTS.values():
+        clustered = counts["n_clusters"] * counts["cans_per_cluster"]
+        assert clustered + counts["n_background_cans"] == 270
+
+
+def test_current_layout_is_the_default_of_the_campus_map():
+    campus = SimulationConfig(map_name="campus")
+    with_layout = SimulationConfig(map_name="campus", layout=CURRENT_LAYOUT)
+    assert replace(with_layout, layout=None) == campus
+
+
+@pytest.mark.parametrize("name", list(LAYOUTS))
+def test_layout_sets_its_counts_and_survives_replace(name):
+    config = SimulationConfig(map_name="campus", layout=name)
+    for field, value in LAYOUTS[name].items():
+        assert getattr(config, field) == value
+    assert replace(config, seed=3).n_clusters == config.n_clusters
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"layout": "nope"}, "Unknown layout"),
+        ({"layout": "uniform", "scenario": "dynamic"}, "static"),
+        ({"layout": "few-large", "n_clusters": 3}, "n_clusters"),
+    ],
+)
+def test_invalid_layouts_rejected(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        SimulationConfig(**kwargs)

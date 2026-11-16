@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from kaucjowicze.config import MAPS, SCENARIOS, STATIC, TEST_MAP, SimulationConfig
+from kaucjowicze.config import LAYOUTS, MAPS, SCENARIOS, STATIC, TEST_MAP, SimulationConfig
 from kaucjowicze.factory import ALGORITHMS, build_simulation
 from kaucjowicze.rewards import REWARDS, SHARED, agent_rewards
 
@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--scenario", choices=SCENARIOS, default=STATIC, help="static cans or parties during a run"
     )
+    parser.add_argument(
+        "--layout",
+        choices=LAYOUTS,
+        default=None,
+        help="named can layout, static scenario only (default: the map's own)",
+    )
     parser.add_argument("--show-map", action="store_true", help="print the map before the run")
     parser.add_argument("--gui", action="store_true", help="show the simulation in a window")
     args = parser.parse_args(argv)
@@ -50,7 +56,10 @@ def main(argv: list[str] | None = None) -> None:
         if seed is None:  # restart has to reproduce the same map, so the seed must be known
             seed = int(np.random.default_rng().integers(2**31))
 
-    config = SimulationConfig(map_name=args.map, scenario=args.scenario)
+    try:
+        config = SimulationConfig(map_name=args.map, scenario=args.scenario, layout=args.layout)
+    except ValueError as error:  # a layout with parties
+        parser.error(str(error))
     sim = build_simulation(args.algorithm, seed, reward, config)
     grid = sim.grid
     if args.show_map:

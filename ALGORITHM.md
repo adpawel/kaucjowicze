@@ -498,3 +498,54 @@ Pomiar z 15 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --firs
 - **Przy N = 5 przewaga ACO jest zaniżona.** Losowy spacer osiągnął 90% tylko w 7 z 30 przebiegów, a pozostałe liczymy jako T = 20000, chociaż prawdziwe t₉₀ jest większe. Z tego samego powodu zaniżony jest nakład losowego spaceru przy N = 5 (91 tys.), więc tego punktu nie należy czytać jako „mało agentów pracuje wydajniej”.
 - **N1 i N2 są równie szybkie przy każdym N** (przedziały t₉₀ się nakładają), tak jak w punkcie 14. Przy N ≥ 40 nakład N2 jest wyższy niż N1, ale tego nie testowaliśmy.
 - **Gini rośnie z N we wszystkich wariantach**, a N2 dzieli najmniej równo przy każdym N. Wzrostu z N nie należy czytać jako „więcej agentów to mniej sprawiedliwie”: przy N = 80 na agenta przypada średnio 3.4 puszki, więc nierówność wynika w dużej części z tego, że puszek jest mało w stosunku do liczby agentów. Ginich dla różnych N nie porównujemy.
+
+## 17. Układ puszek (P6)
+
+**Pytanie:** które wnioski z punktu 14 są ogólne, a które zależą od przyjętego układu puszek (punkt 13), i kiedy ACO przestaje pomagać. To pytanie z `MILESTONES.md` (Część II): „kilka dużych skupisk, wiele małych, rozkład jednorodny”. Już raz wniosek zależał od układu: przewaga Giniego N1 nad losowym spacerem była istotna przy obecnym układzie, a przy poprzednim, bardziej rozproszonym nie (p = 0.064, kontrola w punkcie 14).
+
+### Projekt (ustalony przed pomiarem)
+
+| Układ (`--layout`) | Skupiska | Puszki na skupisko | Puszki tła | Uwagi |
+|---|---|---|---|---|
+| `few-large` | 2 | 135 | 0 | |
+| `current` (odniesienie) | 6 | 45 | 0 | układ z punktu 13 |
+| `many-small` | 18 | 15 | 0 | środki losowane ze zwracaniem, więc skupiska mogą się nakładać (niżej) |
+| `uniform` | 0 | — | 270 | bez skupisk: puszki w dowolnych wolnych komórkach, także daleko od akademików |
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| Liczba puszek | zawsze 270 | Inaczej porównywalibyśmy różną ilość pracy |
+| Pozostałe parametry | jak w punktach 14 i 16: Miasteczko, scenariusz statyczny, N = 20, σ = 2, odległość od akademika 4, ziarna 200–229, T = 20000, trzy warianty | Zmienia się tylko układ |
+| Układy | tylko te cztery, jako słownik `LAYOUTS` w `config.py` | Nie ma osobnych opcji `--n-clusters` itp., bo pozwalałyby na dowolne kombinacje |
+| Kontrola | `current` musi dać przebiegi identyczne z `results/campus` | Konfiguracja `current` różni się od domyślnej tylko nazwą układu (test `test_current_layout_is_the_default_of_the_campus_map`), więc losowanie jest to samo |
+| Testy | ACO N1 / losowy spacer, dla każdego układu jeden test t₉₀ i jeden test Giniego, razem 8, Bonferroni na 8 testów (próg 0.05 / 8 = 0.00625) | Mało testów, wybranych przed pomiarem. N1 / N2 podajemy tylko opisowo |
+| Rodzaj testu | **dwustronny test Wilcoxona dla par**, para to to samo ziarno w obu wariantach | Każdy wariant ma te same mapy, więc test parami ma większą moc niż Mann-Whitney z P1–P5. Wybór jest ostateczny i nie zmienimy go po pomiarze |
+| Remisy w teście | ziarno bez różnicy wypada z testu (`zero_method="wilcox"`), a gdy wypadną wszystkie, p = 1 | Np. oba warianty poniżej 90% liczone jako T. Liczbę par podaje raport |
+| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich oraz liczba ziaren, na których N1 jest szybsze, jak w punkcie 16 | Ta sama miara co w P5 |
+
+Przebieg poniżej 90% liczymy jako T, jak w punkcie 11.
+
+**Hipotezy:**
+
+1. **Przewaga ACO nad losowym spacerem maleje od `few-large` do `uniform`**, czyli stosunek t₉₀ jest największy przy `few-large`, a najmniejszy przy `uniform`. Przy `uniform` różnica t₉₀ nie jest istotna po korekcie, bo ślad prowadzi w miejsca, które po kilku podniesieniach są już puste. Przy pozostałych trzech układach jest istotna.
+2. **Wyższy Gini ACO N1 pojawia się tylko przy wyraźnych skupiskach.** Przy `few-large`, `current` i `many-small` Gini N1 jest istotnie wyższy niż losowego spaceru, a przy `uniform` różnica nie jest istotna.
+
+Kolejność 2–6–18–jednorodny traktujemy jako rosnące rozproszenie. Nie testujemy trendu, tylko porównujemy stosunki opisowo.
+
+### Nakładanie się skupisk w `many-small`
+
+Policzone przed pomiarem, na ziarnach 200–229, z samego losowania środków (bez uruchamiania agentów). Odległość euklidesowa między środkami, σ = 2.
+
+| Układ | Pary środków | w tej samej komórce | ≤ 4 komórki (2σ) | ≤ 8 komórek (4σ) | Skupiska z sąsiadem ≤ 4σ | Grupy rozłączne przy progu 4σ, średnio (min–max) |
+|---|---|---|---|---|---|---|
+| `few-large` | 30 | 0 | 0 | 2 | 6.7% | 1.9 z 2 (1–2) |
+| `current` | 450 | 0 | 5 | 18 | 17.2% | 5.4 z 6 (2–6) |
+| `many-small` | 4590 | 0 | 50 | 150 | 39.8% | 13.7 z 18 (10–17) |
+
+Środek leży najwyżej 4 komórki od akademika, a takich komórek jest tylko 2076, więc przy 18 skupiskach nakładanie jest częste: średnio 1.7 pary na mapę leży bliżej niż 2σ, a 40% skupisk ma sąsiada bliżej niż 4σ. `many-small` to więc w praktyce około 14 skupisk różnej wielkości (15–45 puszek), a nie 18 równych. Nie zmieniamy przez to układu, bo wybór środków jest taki sam jak w pozostałych układach, ale wyniki `many-small` czytamy jako „więcej i mniejszych skupisk” bez dokładnej liczby.
+
+**Kod:** `--layout` w `experiments.py` i `python -m kaucjowicze` (podgląd w oknie) ustawia pole `layout` w `SimulationConfig`, a ono liczby skupisk i puszek z `LAYOUTS`. Układ działa tylko w scenariuszu statycznym (imprezy dodawałyby skupiska) i tylko z domyślną liczbą agentów (bez łączenia z P5). Każdy układ trafia do własnego katalogu `results/<mapa>_layout_<nazwa>`, także `current`, żeby nie nadpisać pomiaru z punktu 14. `runs.csv` ma nową kolumnę `layout`, pustą bez układu. `plots.py` przyjmuje kilka katalogów w `--input`, każdy z innym układem, i wtedy robi tylko raport P6. Na mapie testowej układy też działają, ale `current` nie jest tam układem domyślnym (6 × 40 + 30 puszek tła).
+
+### Wyniki
+
+Do uzupełnienia po pomiarze.

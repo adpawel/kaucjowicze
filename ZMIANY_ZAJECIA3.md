@@ -1,8 +1,8 @@
 # Zmiany od zajęć 2
 
-Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15.
+Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** scenariusz dynamiczny jest scalony z `master` (PR #15). Porównanie P5 (liczba agentów) jest na gałęzi `adpawel/feat/agent-count`.
+**Stan:** scenariusz dynamiczny (PR #15) i porównanie P5, liczba agentów (PR #16), są scalone z `master`. Porównanie P6 (układ puszek) jest na gałęzi `adpawel/feat/can-layout`: kod, projekt i hipotezy są gotowe, pomiar jeszcze nie.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -11,7 +11,7 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 | Kierunek | Stan |
 |---|---|
 | nagroda, która zmienia ilość zostawianego śladu, i cel J | nie zaczęte (plan w `NAGRODY.md`, porównanie P3) |
-| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, pozostałe parametry nie zaczęte |
+| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, **układ puszek w trakcie (P6, §17)**, pozostałe parametry nie zaczęte |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
 | populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
 
@@ -89,8 +89,32 @@ python -m kaucjowicze.plots --input results/campus_dynamic
 python -m kaucjowicze --algorithm aco --map campus --scenario dynamic --seed 200 --gui
 ```
 
+## Układ puszek (P6)
+
+**Pytanie:** które wnioski zależą od przyjętego układu puszek (6 skupisk po 45 przy akademikach), a które są ogólne, i kiedy ACO przestaje pomagać.
+
+**Układy:** zawsze 270 puszek, reszta jak w P1, P2 i P5 (Miasteczko, N = 20, ziarna 200–229, T = 20000).
+
+| Układ | Skupiska × puszki | Puszki tła |
+|---|---|---|
+| `few-large` | 2 × 135 | 0 |
+| `current` (odniesienie) | 6 × 45 | 0 |
+| `many-small` | 18 × 15 | 0 |
+| `uniform` | — | 270 |
+
+**Hipotezy (zapisane przed pomiarem):**
+- przewaga ACO N1 nad losowym spacerem maleje od `few-large` do `uniform`, a przy `uniform` nie jest istotna,
+- wyższy Gini ACO N1 pojawia się tylko przy skupiskach, a przy `uniform` znika.
+
+**Testy:** dla każdego układu jeden test t₉₀ i jeden test Giniego, ACO N1 / losowy spacer, razem 8 z korektą Bonferroniego. Tym razem test Wilcoxona dla par (to samo ziarno), bo ma większą moc niż Mann-Whitney.
+
+**Nakładanie skupisk w `many-small`:** środki leżą blisko akademików, więc 40% skupisk ma sąsiada bliżej niż 8 komórek. W praktyce to około 14 skupisk różnej wielkości zamiast 18.
+
+**Zmiany w kodzie:** `LAYOUTS` i pole `layout` w `config.py`, opcja `--layout` w `experiments.py` i w podglądzie, kolumna `layout` w `runs.csv`, raport P6 w `plots.py` (kilka katalogów w `--input`, wykresy `p6_*.png`).
+
 ## Co zostało do zrobienia
 
+- pomiar P6 i wnioski w `ALGORITHM.md` §17,
 - metryka przywiązania do wyczerpanych skupisk w P4: ile czasu agenci spędzają przy pustych źródłach,
 - analiza wrażliwości na ρ, α, ε, worek i promień widzenia,
 - pozostałe dwa kierunki z tabeli na początku pliku.

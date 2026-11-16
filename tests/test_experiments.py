@@ -1,6 +1,7 @@
 import csv
 import subprocess
 import sys
+from dataclasses import replace
 
 import pytest
 
@@ -91,6 +92,7 @@ def test_columns_follow_the_documented_format():
         "cans_max",
         "J",
         "total_cans",
+        "layout",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",
@@ -375,3 +377,48 @@ def test_one_count_other_than_the_default_never_replaces_the_default_results(tmp
     main(["--seeds", "1", "--max-steps", "2", "--n-agents", "3"])
     assert (tmp_path / "results" / "test_agents" / "runs.csv").exists()
     assert not (tmp_path / "results" / "test").exists()
+
+
+def test_layout_is_recorded_and_empty_without_one(tables):
+    assert {row["layout"] for row in tables.runs} == {None}
+    layout_tables = run_experiment(
+        seeds=[0],
+        config=SimulationConfig(width=30, height=20, n_agents=3, max_steps=5, layout="uniform"),
+    )
+    assert {row["layout"] for row in layout_tables.runs} == {"uniform"}
+    assert {row["initial_cans"] for row in layout_tables.runs} == {270}
+
+
+def test_each_layout_gets_its_own_default_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--map", "campus", "--layout", "current"])
+    runs = _read(tmp_path / "results" / "campus_layout_current" / "runs.csv")
+    assert {row["layout"] for row in runs} == {"current"}
+    assert not (tmp_path / "results" / "campus").exists()
+
+
+def test_current_layout_reproduces_the_default_campus_runs():
+    config = SimulationConfig(map_name="campus", n_agents=3, max_steps=200)
+    default = run_experiment(seeds=[7], config=config)
+    current = run_experiment(seeds=[7], config=replace(config, layout="current"))
+    without_layout = [{k: v for k, v in row.items() if k != "layout"} for row in current.runs]
+    assert without_layout == [
+        {k: v for k, v in row.items() if k != "layout"} for row in default.runs
+    ]
+    assert current.timeline == default.timeline
+    assert current.agents == default.agents
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--layout", "uniform", "--scenario", "dynamic"], "static"),
+        (["--layout", "uniform", "--n-agents", "5"], "default number of agents"),
+        (["--layout", "nope"], "invalid choice"),
+    ],
+)
+def test_command_line_rejects_layout_combinations(arguments, message, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main([*arguments, "--output", str(tmp_path)])
+    assert exc.value.code != 0
+    assert message in capsys.readouterr().err
