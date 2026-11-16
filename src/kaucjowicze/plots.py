@@ -1,8 +1,9 @@
-"""Figures and summary tables of comparisons P1, P2, P4 and P5, made from experiment CSV files.
+"""Figures and summary tables of comparisons P1, P2, P4, P5 and P6, made from experiment CSVs.
 
 P4 compares how fast the variants take up the cans of parties in the dynamic scenario. P5 runs
 the variants with several numbers of agents and replaces the other comparisons, which would
-otherwise mix runs of different sizes.
+otherwise mix runs of different sizes. P6 does the same for the can layouts, whose runs lie in
+one directory per layout and are read together (several `--input` directories).
 
 `python -m kaucjowicze.plots` needs the optional `analysis` dependencies.
 """
@@ -16,6 +17,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 from scipy import stats
+
+from kaucjowicze.config import LAYOUTS
 
 CONFIDENCE = 0.95
 
@@ -43,6 +46,10 @@ TESTED_PAIRS = (
 )
 # P5 tests only this pair, once per number of agents, as decided before the measurement
 P5_PAIR = (ACO_SHARED, RANDOM)
+# P6 tests the same pair, t_90 and Gini once per layout, paired by seed (decided before it ran)
+P6_METRICS = ("t_90", "gini")
+# Runs written without `--layout` have the counts of their map and scenario
+DEFAULT_LAYOUT = "map default"
 SIGNIFICANCE_LEVEL = 0.05
 
 
@@ -65,6 +72,29 @@ def load_results(input_dir: str | Path) -> Results:
     has_reward = runs["reward"].notna()
     runs["variant"] = runs["algorithm"].where(~has_reward, runs["algorithm"] + "/" + runs["reward"])
     return Results(runs, timeline, agents, events)
+
+
+def combine_results(parts: Sequence[Results]) -> Results:
+    """Results of several directories as one, with run ids shifted so they do not repeat."""
+    runs, timeline, agents, events = [], [], [], []
+    next_id = 0
+    for part in parts:
+        shift = next_id - int(part.runs["run_id"].min())
+        for source, target in (
+            (part.runs, runs),
+            (part.timeline, timeline),
+            (part.agents, agents),
+            (part.events, events),
+        ):
+            if source is not None:
+                target.append(source.assign(run_id=source["run_id"] + shift))
+        next_id = int(part.runs["run_id"].max()) + shift + 1
+    return Results(
+        pd.concat(runs, ignore_index=True),
+        pd.concat(timeline, ignore_index=True),
+        pd.concat(agents, ignore_index=True),
+        pd.concat(events, ignore_index=True) if events else None,
+    )
 
 
 def mean_ci(values: Iterable[float]) -> tuple[float, float]:
@@ -249,30 +279,45 @@ def agent_sweep_table(runs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def aco_advantage(runs: pd.DataFrame) -> pd.DataFrame:
-    """Per number of agents: mean t_90 of the random walk over that of ACO N1, and on how many
-    seeds ACO N1 is faster. Both use only the seeds that both variants ran on.
+def paired_by_seed(runs: pd.DataFrame, column: str, variants: Sequence[str]) -> pd.DataFrame:
+    """One row per seed and one column per variant, only seeds that every variant ran on.
+
+    t_90 below its threshold counts as the step limit, as everywhere else.
+    """
+    by_seed = {}
+    for variant in variants:
+        group = runs[runs["variant"] == variant]
+        values = censored(group, column) if column.startswith("t_") else group[column]
+        by_seed[variant] = values.set_axis(group["seed"])
+    return pd.concat(by_seed, axis=1, join="inner")
+
+
+def aco_advantage(runs: pd.DataFrame, by: str = "n_agents") -> pd.DataFrame:
+    """Per value of `by` (number of agents or layout): mean t_90 of the random walk over that of
+    ACO N1, and on how many seeds ACO N1 is faster. Both use only the seeds both variants ran on.
     """
     faster, slower = P5_PAIR
     rows = []
-    for n_agents in sorted(runs["n_agents"].unique()):
-        same_n = runs[runs["n_agents"] == n_agents]
-        by_seed = {}
-        for variant in (slower, faster):
-            group = same_n[same_n["variant"] == variant]
-            by_seed[variant] = censored(group, "t_90").set_axis(group["seed"])
-        if by_seed[slower].empty or by_seed[faster].empty:
+    for value in _sweep_values(runs, by):
+        paired = paired_by_seed(runs[runs[by] == value], "t_90", (slower, faster))
+        if paired.empty:
             continue
-        paired = pd.concat(by_seed, axis=1, join="inner")
         rows.append(
             {
-                "n_agents": int(n_agents),
+                by: value,
                 "ratio": paired[slower].mean() / paired[faster].mean(),
                 "aco_faster": int((paired[faster] < paired[slower]).sum()),
                 "seeds": len(paired),
             }
         )
-    return pd.DataFrame(rows, columns=["n_agents", "ratio", "aco_faster", "seeds"])
+    return pd.DataFrame(rows, columns=[by, "ratio", "aco_faster", "seeds"])
+
+
+def _sweep_values(runs: pd.DataFrame, by: str) -> list:
+    """Values of `by` in order: layouts from the most clustered, numbers ascending."""
+    if by == "layout":
+        return layout_order(runs)
+    return [int(value) for value in sorted(runs[by].unique())]
 
 
 def agent_sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
@@ -293,6 +338,92 @@ def agent_sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
     table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
     table["significant"] = table["p_value"] < table["threshold"]
     return table
+
+
+def with_layout(runs: pd.DataFrame) -> pd.DataFrame:
+    """Runs with a `layout` column; one written without a layout gets `DEFAULT_LAYOUT`."""
+    layout = runs["layout"] if "layout" in runs else pd.Series(np.nan, index=runs.index)
+    return runs.assign(layout=layout.fillna(DEFAULT_LAYOUT))
+
+
+def has_layout_sweep(results: Results) -> bool:
+    """Whether the runs come with more than one can layout (comparison P6)."""
+    return with_layout(results.runs)["layout"].nunique() > 1
+
+
+def layout_order(runs: pd.DataFrame) -> list[str]:
+    """Layouts of the runs in the order of `LAYOUTS`, from the most clustered; others last."""
+    present = set(runs["layout"])
+    known = [name for name in LAYOUTS if name in present]
+    return known + sorted(present - set(known))
+
+
+def layout_table(runs: pd.DataFrame) -> pd.DataFrame:
+    """One row per layout and variant: t_90 and Gini with intervals, runs reaching 90%."""
+    rows = []
+    for layout in layout_order(runs):
+        same = runs[runs["layout"] == layout]
+        for variant in _present(same, VARIANT_ORDER):
+            group = same[same["variant"] == variant]
+            row: dict[str, object] = {"layout": layout, "variant": variant, "runs": len(group)}
+            row["t_90_mean"], row["t_90_ci"] = mean_ci(censored(group, "t_90"))
+            row["gini_mean"], row["gini_ci"] = mean_ci(group["gini"])
+            row["t_90_reached"] = int(group["t_90"].notna().sum())
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _wilcoxon_p(a: pd.Series, b: pd.Series) -> float:
+    """Two-sided Wilcoxon signed-rank p-value of paired values. Pairs with no difference drop
+    out; with no pair left there is no difference to detect, so it is 1.
+    """
+    if (a.to_numpy() == b.to_numpy()).all():
+        return 1.0
+    return float(stats.wilcoxon(a, b, zero_method="wilcox", alternative="two-sided").pvalue)
+
+
+def layout_significance(runs: pd.DataFrame) -> pd.DataFrame:
+    """Wilcoxon signed-rank tests, ACO N1 vs random walk paired by seed, of t_90 and Gini for
+    each layout, with the Bonferroni threshold over all of them.
+    """
+    variant_a, variant_b = P5_PAIR
+    rows = []
+    for layout in layout_order(runs):
+        same = runs[runs["layout"] == layout]
+        for metric in P6_METRICS:
+            paired = paired_by_seed(same, metric, P5_PAIR)
+            if paired.empty:
+                continue
+            p_value = _wilcoxon_p(paired[variant_a], paired[variant_b])
+            rows.append(
+                {"layout": layout, "metric": metric, "pairs": len(paired), "p_value": p_value}
+            )
+    table = pd.DataFrame(rows, columns=["layout", "metric", "pairs", "p_value"])
+    # The number of tests is fixed by the plan, so a missing layout does not loosen the threshold
+    table["threshold"] = SIGNIFICANCE_LEVEL / (len(LAYOUTS) * len(P6_METRICS))
+    table["significant"] = table["p_value"] < table["threshold"]
+    return table
+
+
+def check_layout_inputs(parts: Sequence[Results]) -> str | None:
+    """Why the directories cannot form comparison P6, or `None` when they can.
+
+    Each must hold one named layout, a different one, and all must share the map, scenario,
+    number of agents and step limit, so that only the layout differs.
+    """
+    layouts = []
+    for part in parts:
+        found = set(part.runs["layout"].dropna()) if "layout" in part.runs else set()
+        if len(found) != 1 or part.runs["layout"].isna().any():
+            return "each --input directory must hold the runs of one --layout"
+        layouts += found
+    if len(set(layouts)) != len(layouts):
+        return "each --input directory must hold a different layout"
+    for column in ("map", "scenario", "n_agents", "max_steps"):
+        values = pd.concat([part.runs[column] for part in parts if column in part.runs])
+        if values.nunique(dropna=False) > 1:
+            return f"the --input directories differ in {column}, not only in the layout"
+    return None
 
 
 def _style_axes(figure: Figure, title: str, xlabel: str, ylabel: str):
@@ -397,6 +528,58 @@ def plot_aco_advantage(runs: pd.DataFrame, title: str, path: Path) -> None:
     axes.plot(table["n_agents"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
     _agent_axis(axes, table["n_agents"].tolist())
     axes.set_ylim(bottom=0)
+    figure.savefig(path, dpi=150)
+
+
+def plot_aco_advantage_by_layout(runs: pd.DataFrame, title: str, path: Path) -> None:
+    """How many times faster ACO N1 reaches 90% than the random walk, per layout."""
+    table = aco_advantage(runs, by="layout")
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Can layout", "t_90 random walk / t_90 ACO N1")
+    axes.grid(axis="x", visible=False)
+    positions = np.arange(len(table))
+    axes.bar(positions, table["ratio"], width=0.5, color=COLORS[ACO_SHARED])
+    for position, ratio in zip(positions, table["ratio"], strict=True):
+        axes.annotate(
+            f"{ratio:.2f}",
+            (position, ratio),
+            xytext=(0, 4),
+            textcoords="offset points",
+            ha="center",
+            color=TEXT_PRIMARY,
+        )
+    axes.axhline(1, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
+    axes.set_xticks(positions, table["layout"])
+    axes.set_ylim(bottom=0)
+    figure.savefig(path, dpi=150)
+
+
+def plot_by_layout(runs: pd.DataFrame, column: str, title: str, ylabel: str, path: Path) -> None:
+    """Mean of `column` from `layout_table` with its 95% interval, grouped by layout."""
+    table = layout_table(runs)
+    layouts = layout_order(runs)
+    variants = _present(table, VARIANT_ORDER)
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Can layout", ylabel)
+    axes.grid(axis="x", visible=False)
+    width = 0.8 / max(len(variants), 1)
+    for index, variant in enumerate(variants):
+        rows = table[table["variant"] == variant].set_index("layout").reindex(layouts)
+        positions = np.arange(len(layouts)) + (index - (len(variants) - 1) / 2) * width
+        axes.bar(
+            positions,
+            rows[f"{column}_mean"],
+            width=width,
+            color=COLORS[variant],
+            edgecolor="white",  # a gap between neighbouring bars
+            linewidth=1,
+            yerr=rows[f"{column}_ci"].fillna(0),
+            error_kw={"ecolor": TEXT_SECONDARY, "elinewidth": 1, "capsize": 3},
+            label=LABELS[variant],
+        )
+    axes.set_xticks(np.arange(len(layouts)), layouts)
+    axes.set_ylim(bottom=0)
+    axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
     figure.savefig(path, dpi=150)
 
 
@@ -546,11 +729,68 @@ def format_agent_summary(runs: pd.DataFrame) -> str:
     )
 
 
+def format_layout_summary(runs: pd.DataFrame) -> str:
+    """P6 tables as Markdown."""
+    runs = with_layout(runs)
+    table = _markdown_table(
+        ("Layout", "Variant", "t_90", "Gini", "Reached 90%"),
+        (
+            (
+                row.layout,
+                row.variant,
+                _with_ci(row.t_90_mean, row.t_90_ci, 0),
+                _with_ci(row.gini_mean, row.gini_ci, 3),
+                f"{row.t_90_reached}/{row.runs}",
+            )
+            for row in layout_table(runs).itertuples()
+        ),
+    )
+    advantage = _markdown_table(
+        ("Layout", "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
+        (
+            (row.layout, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
+            for row in aco_advantage(runs, by="layout").itertuples()
+        ),
+    )
+    significance = _markdown_table(
+        ("Layout", "Metric", "Pairs", "p-value", "Bonferroni threshold", "Significant"),
+        (
+            (
+                row.layout,
+                row.metric,
+                row.pairs,
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
+            )
+            for row in layout_significance(runs).itertuples()
+        ),
+    )
+    variant_a, variant_b = P5_PAIR
+    return (
+        "# Can layout (P6)\n\n"
+        f"Map: {map_label(runs)}. Scenario: {scenario_label(runs)}.\n\n"
+        "Mean ± 95% confidence interval. A run below 90% counts as the step limit T.\n\n"
+        f"{table}\n\n"
+        "## Advantage of ACO N1\n\n"
+        "Ratio of the mean t_90 values over the seeds both variants ran on.\n\n"
+        f"{advantage}\n\n"
+        "## Significance\n\n"
+        f"Two-sided Wilcoxon signed-rank test, {variant_a} vs {variant_b} paired by seed, for "
+        "t_90 and Gini in each layout, Bonferroni correction over all of these tests. A seed "
+        "with no difference drops out of its test.\n\n"
+        f"{significance}\n"
+    )
+
+
 def report_text(results: Results) -> str:
     """Everything `summary.md` holds: P1 and P2 tables, and P4 in a run with parties.
 
-    Runs with several numbers of agents get only the P5 tables.
+    Runs with several numbers of agents get only the P5 tables, and with several layouts only
+    the P6 tables.
     """
+    if has_layout_sweep(results):
+        return format_layout_summary(results.runs)
     if has_agent_sweep(results):
         return format_agent_summary(results.runs)
     text = format_summary(results.runs)
@@ -612,7 +852,10 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     output.mkdir(parents=True, exist_ok=True)
     written = []
     label = map_label(results.runs)
-    if has_agent_sweep(results):
+    if has_layout_sweep(results):
+        written += _write_layout_figures(with_layout(results.runs), label, output)
+        available = set()  # P1, P2 and P4 would mix layouts
+    elif has_agent_sweep(results):
         written += _write_agent_figures(results.runs, label, output)
         available = set()  # P1, P2 and P4 would mix runs of different sizes
     else:
@@ -656,18 +899,45 @@ def _write_agent_figures(runs: pd.DataFrame, label: str, output: Path) -> list[P
     return paths
 
 
+def _write_layout_figures(runs: pd.DataFrame, label: str, output: Path) -> list[Path]:
+    paths = [output / f"p6_{name}_by_layout.png" for name in ("t90", "gini")]
+    title = f"P6: time to 90% of the cans ({label})"
+    plot_by_layout(runs, "t_90", title, "t_90 [steps]", paths[0])
+    title = f"P6: inequality of cans per agent ({label})"
+    plot_by_layout(runs, "gini", title, "Gini", paths[1])
+    if set(runs["variant"]).issuperset(P5_PAIR):
+        path = output / "p6_aco_advantage.png"
+        plot_aco_advantage_by_layout(runs, f"P6: how many times faster ACO N1 is ({label})", path)
+        paths.append(path)
+    return paths
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Make figures and tables from experiment CSVs")
     parser.add_argument(
-        "--input", type=Path, default=Path("results/test"), help="directory with CSVs"
+        "--input",
+        type=Path,
+        nargs="+",
+        default=[Path("results/test")],
+        help="directory with CSVs; several directories, one layout each, make comparison P6",
     )
     parser.add_argument(
-        "--output", type=Path, default=None, help="report directory (default: <input>/figures)"
+        "--output",
+        type=Path,
+        default=None,
+        help="report directory (default: <input>/figures, required with several inputs)",
     )
     args = parser.parse_args(argv)
+    if len(args.input) > 1 and args.output is None:
+        parser.error("--output is required with several --input directories")
 
-    results = load_results(args.input)
-    output = args.output or args.input / "figures"
+    parts = [load_results(directory) for directory in args.input]
+    if len(parts) > 1:  # joining directories only makes sense for layouts
+        problem = check_layout_inputs(parts)
+        if problem is not None:
+            parser.error(problem)
+    results = parts[0] if len(parts) == 1 else combine_results(parts)
+    output = args.output or args.input[0] / "figures"
     write_report(results, output)
     print(report_text(results))
     print(f"Report written to {output}")

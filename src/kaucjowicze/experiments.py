@@ -3,6 +3,7 @@
 `python -m kaucjowicze.experiments` writes `runs.csv`, `timeline.csv`, `agents.csv` and
 `events.csv` (parties of the dynamic scenario; only a header in the static one). With several
 `--n-agents` values every count runs on the same seeds and the files hold all of them (P5).
+`--layout` picks a named can layout of comparison P6, each written to a directory of its own.
 """
 
 import argparse
@@ -11,7 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from kaucjowicze.config import MAPS, SCENARIOS, STATIC, SimulationConfig
+from kaucjowicze.config import LAYOUTS, MAPS, SCENARIOS, STATIC, SimulationConfig
 from kaucjowicze.factory import build_simulation
 from kaucjowicze.metrics import RunRecord, record_run
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
@@ -48,6 +49,7 @@ RUNS_COLUMNS = (
     "cans_max",
     "J",
     "total_cans",
+    "layout",
 )
 TIMELINE_COLUMNS = (
     "run_id",
@@ -117,6 +119,7 @@ def _run_row(
         "cans_max": record.cans_max,
         "J": None,  # objective C: its weights are not decided yet
         "total_cans": record.total_cans,
+        "layout": config.layout,  # empty: the counts of the map and scenario
     }
 
 
@@ -259,11 +262,17 @@ def main(argv: list[str] | None = None) -> None:
         help="number of agents; several values run each of them (default: %(default)s)",
     )
     parser.add_argument(
+        "--layout",
+        choices=LAYOUTS,
+        default=None,
+        help="named can layout of comparison P6, static scenario only (default: the map's own)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="output directory (default: results/<map>, with _dynamic for parties and _agents "
-        "for --n-agents other than the default)",
+        help="output directory (default: results/<map>, with _dynamic for parties, _agents "
+        "for --n-agents other than the default and _layout_<name> for --layout)",
     )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
@@ -274,13 +283,15 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("--n-agents must be positive")
     if len(set(args.n_agents)) != len(args.n_agents):
         parser.error("--n-agents must not repeat a value")
+    if args.layout is not None and args.n_agents != [defaults.n_agents]:
+        parser.error("--layout runs with the default number of agents only")
 
     def report(done: int, total: int, label: str) -> None:
         print(f"[{done}/{total}] {label}", flush=True)
 
     try:
         config = SimulationConfig(
-            map_name=args.map, scenario=args.scenario, max_steps=args.max_steps
+            map_name=args.map, scenario=args.scenario, layout=args.layout, max_steps=args.max_steps
         )
     except ValueError as error:  # e.g. a step limit that comes before the last party
         parser.error(str(error))
@@ -289,6 +300,8 @@ def main(argv: list[str] | None = None) -> None:
     # Any other count gets its own directory, so it never replaces the measurement at the default
     if args.n_agents != [defaults.n_agents]:
         folder += "_agents"
+    if args.layout is not None:  # `current` too, so the default results stay as they are
+        folder += f"_layout_{args.layout}"
     output = args.output or Path("results") / folder
     write_tables(run_agent_counts(seeds, args.n_agents, config, progress=report), output)
     print(f"Results written to {output}")

@@ -1,8 +1,8 @@
 # Zmiany od zajęć 2
 
-Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15.
+Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** scenariusz dynamiczny jest scalony z `master` (PR #15). Porównanie P5 (liczba agentów) jest na gałęzi `adpawel/feat/agent-count`.
+**Stan:** scenariusz dynamiczny (PR #15) i porównanie P5, liczba agentów (PR #16), są scalone z `master`. Porównanie P6 (układ puszek) jest na gałęzi `adpawel/feat/can-layout`.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -11,7 +11,7 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 | Kierunek | Stan |
 |---|---|
 | nagroda, która zmienia ilość zostawianego śladu, i cel J | nie zaczęte (plan w `NAGRODY.md`, porównanie P3) |
-| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, pozostałe parametry nie zaczęte |
+| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, **układ puszek zrobiony (porównanie P6, §17)**, pozostałe parametry nie zaczęte |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
 | populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
 
@@ -88,6 +88,46 @@ python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sce
 python -m kaucjowicze.plots --input results/campus_dynamic
 python -m kaucjowicze --algorithm aco --map campus --scenario dynamic --seed 200 --gui
 ```
+
+## Układ puszek (P6)
+
+**Pytanie:** które wnioski zależą od przyjętego układu puszek (6 skupisk po 45 przy akademikach), a które są ogólne, i kiedy ACO przestaje pomagać.
+
+**Układy:** zawsze 270 puszek, reszta jak w P1, P2 i P5 (Miasteczko, N = 20, ziarna 200–229, T = 20000).
+
+| Układ | Skupiska × puszki | Puszki tła |
+|---|---|---|
+| `few-large` | 2 × 135 | 0 |
+| `current` (odniesienie) | 6 × 45 | 0 |
+| `many-small` | 18 × 15 | 0 |
+| `uniform` | — | 270 |
+
+**Hipotezy (zapisane przed pomiarem):**
+- przewaga ACO N1 nad losowym spacerem maleje od `few-large` do `uniform`, a przy `uniform` nie jest istotna,
+- wyższy Gini ACO N1 pojawia się tylko przy skupiskach, a przy `uniform` znika.
+
+**Testy:** dla każdego układu jeden test t₉₀ i jeden test Giniego, ACO N1 / losowy spacer, razem 8 z korektą Bonferroniego. Tym razem test Wilcoxona dla par (to samo ziarno), bo ma większą moc niż Mann-Whitney.
+
+**Nakładanie skupisk w `many-small`:** środki leżą blisko akademików, więc 40% skupisk ma sąsiada bliżej niż 8 komórek. W praktyce to około 14 skupisk różnej wielkości zamiast 18.
+
+## Wyniki P6
+
+Miasteczko, ziarna 200–229, T = 20000. Średnia ± przedział 95%. ✓ oznacza wynik istotny po korekcie Bonferroniego na 8 testów.
+
+| Układ | t₉₀ losowy | t₉₀ ACO N1 | t₉₀ N2 | losowy / ACO N1 | Gini losowy / N1 / N2 | p (t₉₀) | p (Gini) |
+|---|---|---|---|---|---|---|---|
+| `few-large` | 10412 ± 2333 | 1491 ± 792 | 2089 ± 846 | 6.98 | 0.452 / 0.566 / 0.820 | 1.9 · 10⁻⁹ ✓ | 1.1 · 10⁻⁵ ✓ |
+| `current` | 7257 ± 1588 | 2439 ± 559 | 2360 ± 471 | 2.98 | 0.407 / 0.516 / 0.689 | 1.3 · 10⁻⁸ ✓ | 5.1 · 10⁻⁶ ✓ |
+| `many-small` | 5263 ± 826 | 2278 ± 577 | 3549 ± 784 | 2.31 | 0.410 / 0.444 / 0.555 | 2.4 · 10⁻⁶ ✓ | 0.031 |
+| `uniform` | 8755 ± 778 | 8084 ± 1537 | 8342 ± 1019 | 1.08 | 0.321 / 0.330 / 0.348 | 0.13 | 0.52 |
+
+**Wnioski:**
+- **Hipoteza 1 się potwierdziła.** Przewaga ACO maleje od 7 razy przy dwóch dużych skupiskach do braku istotnej różnicy przy rozkładzie jednorodnym.
+- **Hipoteza 2 potwierdziła się częściowo.** Wyższy Gini ACO występuje tylko przy dużych skupiskach i znika już przy wielu małych, a nie dopiero przy rozkładzie jednorodnym.
+- **Od układu zależy** to, że ACO jest szybsze (nie przy rozkładzie jednorodnym), wielkość przewagi i wyższy Gini ACO. Wniosek „N1 i N2 są równie szybkie” może też być własnością obecnego układu, bo przy `few-large` i `many-small` N1 jest średnio szybsze (bez testu).
+- Kontrola: przebiegi układu `current` są identyczne z wynikami z P1 i P2.
+
+**Zmiany w kodzie:** `LAYOUTS` i pole `layout` w `config.py`, opcja `--layout` w `experiments.py` i w podglądzie, kolumna `layout` w `runs.csv`, raport P6 w `plots.py` (kilka katalogów w `--input`, wykresy `p6_*.png`).
 
 ## Co zostało do zrobienia
 
