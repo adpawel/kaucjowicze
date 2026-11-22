@@ -11,6 +11,7 @@ from kaucjowicze.experiments import (
     EVENTS_COLUMNS,
     RUNS_COLUMNS,
     TIMELINE_COLUMNS,
+    TRAIL_VARIANTS,
     VARIANTS,
     main,
     run_agent_counts,
@@ -97,6 +98,7 @@ def test_columns_follow_the_documented_format():
         "r",
         "sweep",
         "sweep_value",
+        "trail",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",
@@ -173,8 +175,69 @@ def test_aco_without_a_reward_is_recorded_as_the_shared_reward_it_runs():
     assert labels == ["aco/shared, seed 0"]
 
 
-def test_columns_without_a_definition_yet_stay_empty(tables):
-    assert all(row["beta"] is None and row["J"] is None for row in tables.runs)
+def test_beta_stays_empty_and_j_is_filled(tables):
+    for row in tables.runs:
+        assert row["beta"] is None
+        t_90 = SMALL.max_steps if row["t_90"] is None else row["t_90"]
+        expected = 0.5 * (1 - t_90 / SMALL.max_steps) + 0.5 * (1 - row["gini"])
+        assert row["J"] == pytest.approx(expected)
+
+
+def test_only_aco_n1_names_its_trail(tables):
+    assert {row["reward"]: row["trail"] for row in tables.runs} == {
+        None: None,
+        "shared": "source",
+        "individual": None,
+    }
+
+
+def test_trail_variants_run_aco_n1_with_another_signal():
+    labels = []
+    tables = run_experiment(
+        seeds=[0],
+        config=SMALL,
+        variants=(("aco", "shared"), *TRAIL_VARIANTS),
+        progress=lambda done, total, label: labels.append(label),
+    )
+    assert [row["trail"] for row in tables.runs] == ["source", "speed", "equal+", "equal-"]
+    assert {row["reward"] for row in tables.runs} == {"shared"}
+    assert labels[1] == "aco/shared/speed, seed 0"
+
+
+@pytest.mark.parametrize("variant", [("random", None, "speed"), ("aco", "individual", "speed")])
+def test_trail_signal_needs_aco_n1(variant):
+    with pytest.raises(ValueError, match="only to ACO"):
+        run_experiment(seeds=[0], config=SMALL, variants=(variant,))
+
+
+def test_trails_get_their_own_directory_next_to_the_usual_variants(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--trails", "speed", "equal-"])
+    runs = _read(tmp_path / "results" / "test_trails" / "runs.csv")
+    assert [(row["reward"], row["trail"]) for row in runs] == [
+        ("", ""),
+        ("shared", "source"),
+        ("individual", ""),
+        ("shared", "speed"),
+        ("shared", "equal-"),
+    ]
+    assert not (tmp_path / "results" / "test").exists()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--trails", "speed", "--sweep", "bag_capacity", "2"], "not with a sweep"),
+        (["--trails", "speed", "--layout", "uniform"], "not with a sweep"),
+        (["--trails", "speed", "speed"], "repeat"),
+        (["--trails", "source"], "invalid choice"),
+    ],
+)
+def test_command_line_rejects_invalid_trails(arguments, message, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main([*arguments, "--output", str(tmp_path)])
+    assert exc.value.code != 0
+    assert message in capsys.readouterr().err
 
 
 def test_tables_of_one_run_agree(tables):
@@ -201,7 +264,7 @@ def test_csv_files_round_trip_with_empty_values(tables, tmp_path):
     assert random_run["algorithm"] == "random"
     assert random_run["reward"] == ""
     assert random_run["rho"] == ""
-    assert random_run["J"] == ""
+    assert random_run["beta"] == ""
 
 
 def test_threshold_not_reached_is_written_as_empty(tmp_path):

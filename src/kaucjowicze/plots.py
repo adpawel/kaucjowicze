@@ -1,4 +1,7 @@
-"""Figures and summary tables of comparisons P1, P2 and P4 to P9, made from experiment CSVs.
+"""Figures and summary tables of comparisons P1 to P9, made from experiment CSVs.
+
+P3 compares the trail signals of ACO N1 (`--trails` in `kaucjowicze.experiments`) and the
+success measure J for several weights; it comes next to P1 and P2, whose runs are the same.
 
 P4 compares how fast the variants take up the cans of parties in the dynamic scenario. P5 and
 P7 to P9 are sweeps: the variants run with several values of one parameter (number of agents,
@@ -21,25 +24,46 @@ from scipy import stats
 
 from kaucjowicze.config import LAYOUTS, SimulationConfig
 from kaucjowicze.experiments import SWEEPS
+from kaucjowicze.metrics import J_WEIGHT, objective_j
 
 CONFIDENCE = 0.95
 
 RANDOM = "random"
 ACO_SHARED = "aco/shared"
 ACO_INDIVIDUAL = "aco/individual"
-VARIANT_ORDER = (RANDOM, ACO_SHARED, ACO_INDIVIDUAL)
+# ACO N1 with another trail signal than `source` (comparison P3)
+ACO_SPEED = "aco/shared/speed"
+ACO_EQUAL_PLUS = "aco/shared/equal+"
+ACO_EQUAL_MINUS = "aco/shared/equal-"
+VARIANT_ORDER = (RANDOM, ACO_SHARED, ACO_INDIVIDUAL, ACO_SPEED, ACO_EQUAL_PLUS, ACO_EQUAL_MINUS)
 LABELS = {
     RANDOM: "Random walk",
     ACO_SHARED: "ACO, shared reward (N1)",
     ACO_INDIVIDUAL: "Individual reward (N2)",
+    ACO_SPEED: "N1, trail for pace (speed)",
+    ACO_EQUAL_PLUS: "N1, trail for equality, gamma +1",
+    ACO_EQUAL_MINUS: "N1, trail for equality, gamma -1",
 }
-# A variant keeps its color in every figure
-COLORS = {RANDOM: "#2a78d6", ACO_SHARED: "#eb6834", ACO_INDIVIDUAL: "#1baf7a"}
+# A variant keeps its color in every figure: the categorical slots in their fixed order
+COLORS = {
+    RANDOM: "#2a78d6",
+    ACO_SHARED: "#eb6834",
+    ACO_INDIVIDUAL: "#1baf7a",
+    ACO_SPEED: "#eda100",
+    ACO_EQUAL_PLUS: "#e87ba4",
+    ACO_EQUAL_MINUS: "#008300",
+}
+# The trail signals are also dashed, so they never differ by color alone
+LINE_STYLES = {ACO_SPEED: "--", ACO_EQUAL_PLUS: "--", ACO_EQUAL_MINUS: "--"}
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 GRID = "#e4e3df"
 
 P1_VARIANTS = (RANDOM, ACO_SHARED)
+P3_VARIANTS = (ACO_SHARED, ACO_SPEED, ACO_EQUAL_PLUS, ACO_EQUAL_MINUS)
+# P3 tests each signal against `source` on its own success measure (decided before it ran)
+P3_TESTS = ((ACO_SPEED, "t_90"), (ACO_EQUAL_PLUS, "gini"), (ACO_EQUAL_MINUS, "gini"))
+J_WEIGHTS = (0.0, 0.25, 0.5, 0.75, 1.0)
 P2_VARIANTS = (RANDOM, ACO_SHARED, ACO_INDIVIDUAL)
 TESTED_PAIRS = (
     (ACO_SHARED, RANDOM),
@@ -86,6 +110,9 @@ def load_results(input_dir: str | Path) -> Results:
     events = pd.read_csv(events_path) if events_path.exists() else None
     has_reward = runs["reward"].notna()
     runs["variant"] = runs["algorithm"].where(~has_reward, runs["algorithm"] + "/" + runs["reward"])
+    if "trail" in runs:  # `source` is ACO N1 as it always was, so it keeps its name
+        other = runs["trail"].notna() & (runs["trail"] != "source")
+        runs.loc[other, "variant"] = runs["variant"] + "/" + runs["trail"]
     return Results(runs, timeline, agents, events)
 
 
@@ -205,6 +232,77 @@ def significance_table(runs: pd.DataFrame) -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])
+
+
+def has_trails(results: Results) -> bool:
+    """Whether ACO N1 also ran with another trail signal (comparison P3)."""
+    return bool(set(results.runs["variant"]) & set(P3_VARIANTS[1:]))
+
+
+def with_j(runs: pd.DataFrame, w1: float) -> pd.Series:
+    """J of each run for the weight `w1` of the pace; t_90 below 90% counts as no pace."""
+    return pd.Series(
+        [
+            objective_j(None if pd.isna(t) else t, limit, gini, w1)
+            for t, limit, gini in zip(runs["t_90"], runs["max_steps"], runs["gini"], strict=True)
+        ],
+        index=runs.index,
+    )
+
+
+def signal_table(runs: pd.DataFrame) -> pd.DataFrame:
+    """One row per variant: t_90, Gini and J for every weight in `J_WEIGHTS`, with intervals."""
+    rows = []
+    for variant in _present(runs, VARIANT_ORDER):
+        group = runs[runs["variant"] == variant]
+        row: dict[str, object] = {"variant": variant, "runs": len(group)}
+        row["t_90_mean"], row["t_90_ci"] = mean_ci(censored(group, "t_90"))
+        row["gini_mean"], row["gini_ci"] = mean_ci(group["gini"])
+        for w1 in J_WEIGHTS:
+            row[f"J_{w1:g}_mean"], row[f"J_{w1:g}_ci"] = mean_ci(with_j(group, w1))
+        row["t_90_reached"] = int(group["t_90"].notna().sum())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def signal_significance(runs: pd.DataFrame) -> pd.DataFrame:
+    """Two-sided Mann-Whitney test of each trail signal against `source` on its own measure,
+    with the Bonferroni threshold over the planned tests.
+    """
+    reference = runs[runs["variant"] == ACO_SHARED]
+    rows = []
+    for variant, metric in P3_TESTS:
+        group = runs[runs["variant"] == variant]
+        if group.empty or reference.empty:
+            continue
+        if metric == "t_90":
+            a, b = censored(group, metric), censored(reference, metric)
+        else:
+            a, b = group[metric], reference[metric]
+        rows.append(
+            {
+                "variant": variant,
+                "metric": metric,
+                "mean": float(a.mean()),
+                "reference_mean": float(b.mean()),
+                "p_value": _mann_whitney_p(a, b),
+            }
+        )
+    table = pd.DataFrame(rows, columns=["variant", "metric", "mean", "reference_mean", "p_value"])
+    # The number of tests is fixed by the plan, so a missing signal does not loosen the threshold
+    table["threshold"] = SIGNIFICANCE_LEVEL / len(P3_TESTS)
+    table["significant"] = table["p_value"] < table["threshold"]
+    return table
+
+
+def best_by_weight(runs: pd.DataFrame) -> pd.DataFrame:
+    """For each weight of the pace: the variant with the highest mean J."""
+    table = signal_table(runs)
+    rows = []
+    for w1 in J_WEIGHTS:
+        best = table.loc[table[f"J_{w1:g}_mean"].idxmax()]
+        rows.append({"w1": w1, "variant": best["variant"], "J": best[f"J_{w1:g}_mean"]})
+    return pd.DataFrame(rows)
 
 
 def has_parties(results: Results) -> bool:
@@ -558,7 +656,15 @@ def _plot_bands(axes, results: Results, curves: pd.DataFrame, variants, legend: 
         band = curve_band(curves[run_ids.tolist()])
         color = COLORS[variant]
         axes.fill_between(band.index, band["low"], band["high"], color=color, alpha=0.18, lw=0)
-        axes.plot(band.index, band["mean"], color=color, linewidth=2, label=LABELS[variant])
+        style = LINE_STYLES.get(variant, "-")
+        axes.plot(
+            band.index,
+            band["mean"],
+            color=color,
+            linewidth=2,
+            linestyle=style,
+            label=LABELS[variant],
+        )
     axes.set_xlim(left=0)
     axes.set_ylim(bottom=0)
     axes.legend(frameon=False, loc=legend, labelcolor=TEXT_PRIMARY)
@@ -687,6 +793,33 @@ def plot_by_layout(runs: pd.DataFrame, column: str, title: str, ylabel: str, pat
     figure.savefig(path, dpi=150)
 
 
+def plot_tradeoff(runs: pd.DataFrame, title: str, path: Path) -> None:
+    """Mean t_90 against mean Gini of each variant with 95% intervals: lower-left is better."""
+    table = signal_table(runs)
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "t_90 [steps]", "Gini of cans per agent")
+    for row in table.itertuples():
+        axes.errorbar(
+            row.t_90_mean,
+            row.gini_mean,
+            xerr=0 if np.isnan(row.t_90_ci) else row.t_90_ci,
+            yerr=0 if np.isnan(row.gini_ci) else row.gini_ci,
+            fmt="o",
+            markersize=8,
+            color=COLORS[row.variant],
+            markeredgecolor="white",  # a ring keeps overlapping points apart
+            markeredgewidth=2,
+            ecolor=COLORS[row.variant],
+            elinewidth=1,
+            capsize=3,
+            label=LABELS[row.variant],
+        )
+    axes.set_xlim(left=0)
+    axes.set_ylim(bottom=0)
+    axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY, fontsize=9)
+    figure.savefig(path, dpi=150)
+
+
 def _box_plot(
     data: Sequence[pd.Series], variants: Sequence[str], title: str, ylabel: str, path: Path
 ) -> None:
@@ -739,6 +872,63 @@ def scenario_label(runs: pd.DataFrame) -> str:
     if "scenario" not in runs:
         return "not recorded"
     return ", ".join(sorted(runs["scenario"].unique()))
+
+
+def format_signal_summary(runs: pd.DataFrame) -> str:
+    """P3 tables as Markdown."""
+    table = signal_table(runs)
+    measures = _markdown_table(
+        ("Variant", "t_90", "Gini", *(f"J, w1 = {w1:g}" for w1 in J_WEIGHTS), "Reached 90%"),
+        (
+            (
+                row["variant"],
+                _with_ci(row["t_90_mean"], row["t_90_ci"], 0),
+                _with_ci(row["gini_mean"], row["gini_ci"], 3),
+                *(_with_ci(row[f"J_{w1:g}_mean"], row[f"J_{w1:g}_ci"], 3) for w1 in J_WEIGHTS),
+                f"{row['t_90_reached']}/{row['runs']}",
+            )
+            for _, row in table.iterrows()
+        ),
+    )
+    best = _markdown_table(
+        ("w1", "Highest mean J", "J"),
+        ((f"{row.w1:g}", row.variant, f"{row.J:.3f}") for row in best_by_weight(runs).itertuples()),
+    )
+    significance = _markdown_table(
+        (
+            "Signal",
+            "Measure",
+            "Mean",
+            f"Mean of {ACO_SHARED}",
+            "p-value",
+            "Bonferroni threshold",
+            "Significant",
+        ),
+        (
+            (
+                row.variant,
+                row.metric,
+                f"{row.mean:.3g}",
+                f"{row.reference_mean:.3g}",
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
+            )
+            for row in signal_significance(runs).itertuples()
+        ),
+    )
+    return (
+        "## Trail signals (P3)\n\n"
+        f"Mean ± 95% interval. `{ACO_SHARED}` is the `source` signal. J = w1 · (1 − t_90 / T) "
+        f"+ (1 − w1) · (1 − Gini), a run below 90% has no pace; runs.csv holds J for "
+        f"w1 = {J_WEIGHT:g}.\n\n"
+        f"{measures}\n\n"
+        "Variant with the highest mean J for each weight (descriptive, no test):\n\n"
+        f"{best}\n\n"
+        f"Two-sided Mann-Whitney test of each signal against {ACO_SHARED} on its own measure, "
+        "Bonferroni correction over these tests.\n\n"
+        f"{significance}\n"
+    )
 
 
 def format_party_summary(results: Results) -> str:
@@ -952,6 +1142,8 @@ def report_text(results: Results) -> str:
     if has_sweep(results):
         return format_sweep_summary(results.runs)
     text = format_summary(results.runs)
+    if has_trails(results):
+        text += "\n" + format_signal_summary(results.runs)
     if has_parties(results):
         text += "\n" + format_party_summary(results)
     return text
@@ -1029,6 +1221,14 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
         written.append(path)
         path = output / "p2_cans_per_agent.png"
         plot_cans_per_agent(results, P2_VARIANTS, f"P2: cans delivered per agent ({label})", path)
+        written.append(path)
+    if available and has_trails(results):
+        signals = [variant for variant in P3_VARIANTS if variant in available]
+        path = output / "p3_collection_curve.png"
+        plot_collection_curves(results, signals, f"P3: trail signals of ACO N1 ({label})", path)
+        written.append(path)
+        path = output / "p3_tradeoff.png"
+        plot_tradeoff(results.runs, f"P3: pace against equality ({label})", path)
         written.append(path)
     if available and has_parties(results) and available.issuperset(P2_VARIANTS):
         path = output / "p4_cans_on_map.png"

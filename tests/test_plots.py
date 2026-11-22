@@ -711,3 +711,78 @@ def test_trail_parameter_is_tested_against_aco_at_its_default():
     summary = format_sweep_summary(runs)
     assert summary.startswith("# Evaporation rate (P9)")
     assert "at the default rho = 0.02" in summary
+
+
+@pytest.fixture(scope="module")
+def trails_dir(tmp_path_factory):
+    from kaucjowicze.experiments import TRAIL_VARIANTS, VARIANTS
+
+    config = SimulationConfig(
+        width=30, height=20, n_clusters=2, cans_per_cluster=5, n_agents=3, max_steps=150
+    )
+    output = tmp_path_factory.mktemp("trails")
+    tables = run_experiment([0, 1, 2], config, VARIANTS + TRAIL_VARIANTS)
+    write_tables(tables, output)
+    return output
+
+
+def test_trail_variants_are_named_after_their_signal(trails_dir, result_dir):
+    from kaucjowicze.plots import has_trails
+
+    results = load_results(trails_dir)
+    assert list(dict.fromkeys(results.runs["variant"])) == [
+        "random",
+        "aco/shared",
+        "aco/individual",
+        "aco/shared/speed",
+        "aco/shared/equal+",
+        "aco/shared/equal-",
+    ]
+    assert has_trails(results)
+    assert not has_trails(load_results(result_dir))
+
+
+def test_trail_report_adds_p3_to_p1_and_p2(trails_dir, tmp_path):
+    names = {path.name for path in write_report(load_results(trails_dir), tmp_path)}
+    assert {"p1_collection_curve.png", "p3_collection_curve.png", "p3_tradeoff.png"} <= names
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "## Trail signals (P3)" in summary
+    assert "J, w1 = 0.25" in summary
+
+
+def test_j_for_every_weight_uses_censored_pace():
+    from kaucjowicze.plots import signal_table
+
+    runs = _runs(
+        [
+            {"variant": "aco/shared", "t_90": 25.0, "gini": 0.2},
+            {"variant": "aco/shared", "t_90": None, "gini": 0.4},
+        ]
+    )
+    row = signal_table(runs).iloc[0]
+    assert row["J_1_mean"] == pytest.approx((0.75 + 0.0) / 2)
+    assert row["J_0_mean"] == pytest.approx((0.8 + 0.6) / 2)
+    assert row["J_0.5_mean"] == pytest.approx((0.775 + 0.3) / 2)
+
+
+def test_each_signal_is_tested_on_its_own_measure_with_bonferroni():
+    from kaucjowicze.plots import best_by_weight, signal_significance
+
+    rows = []
+    for s in range(8):
+        rows.append({"variant": "aco/shared", "seed": s, "t_90": 50.0 + s, "gini": 0.5})
+        rows.append({"variant": "aco/shared/speed", "seed": s, "t_90": 10.0 + s, "gini": 0.5})
+        rows.append(
+            {"variant": "aco/shared/equal+", "seed": s, "t_90": 50.0, "gini": 0.1 + s / 100}
+        )
+    tests = signal_significance(_runs(rows))
+
+    assert list(zip(tests["variant"], tests["metric"], strict=True)) == [
+        ("aco/shared/speed", "t_90"),
+        ("aco/shared/equal+", "gini"),
+    ]
+    assert tests["threshold"].tolist() == pytest.approx([0.05 / 3] * 2)
+    assert tests["significant"].all()
+    best = best_by_weight(_runs(rows))
+    assert best.set_index("w1").loc[1.0, "variant"] == "aco/shared/speed"
+    assert best.set_index("w1").loc[0.0, "variant"] == "aco/shared/equal+"

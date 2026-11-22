@@ -2,7 +2,7 @@
 
 Ten dokument opisuje, dlaczego obecne funkcje nagrody nie określają tego, do czego dążą agenci, oraz proponuje warianty, które to zmieniają. Ogólny model jest w [`PLAN.md`](PLAN.md), obecne N1 i N2 w [`MILESTONES.md`](MILESTONES.md), a wzory i pomiary w [`ALGORITHM.md`](ALGORITHM.md).
 
-**Status: propozycja.** Nic z sekcji 3 i 4 nie jest zaimplementowane ani zmierzone.
+**Status: zaimplementowane i zmierzone (porównanie P3, `ALGORITHM.md` punkt 20).** Wszystkie cztery sygnały i miara J są w kodzie (`--trails` w `experiments.py`, `--trail` w podglądzie). Wynik jest negatywny: żaden sygnał nie zmienia istotnie t₉₀ ani Giniego względem `source`, ani na Miasteczku, ani na mapie testowej. Pytanie z sekcji 5 pozostaje otwarte, ale odpowiedź nie zmienia już planu prac.
 
 ---
 
@@ -12,7 +12,7 @@ Ten dokument opisuje, dlaczego obecne funkcje nagrody nie określają tego, do c
 2. **„Dzielenie się” w N1 istnieje tylko na papierze.** Każdy agent nosi własny worek, a `cans_collected` rośnie o to, co sam oddał (`simulation.py`, `_deposit`).
 3. **P2 nie porównuje dwóch celów tego samego algorytmu.** N2 nie ma feromonu, więc nie jest ACO. P2 mierzy głównie ślad kontra prywatna pamięć (`ALGORITHM.md`, punkt 10).
 4. **Unikanie tłoku, jedyna reguła odróżniająca N1 od zwykłego ACO, prawie nie działa.** Włącza się przy 0,44% decyzji o śladzie (`ALGORITHM.md`, punkt 10).
-5. **Sukces nie jest zdefiniowany jednoznacznie.** Warianty A i B z `PLAN.md` 4.2 są mierzone, ale `J` (wariant C) nie jest policzone: kolumna jest pusta, nie ma wag ani definicji `szybkość_norm`.
+5. **Sukces nie jest zdefiniowany jednoznacznie.** Warianty A i B z `PLAN.md` 4.2 są mierzone, ale `J` (wariant C) nie było policzone. *Rozwiązane: kolumna `J` w `runs.csv` (w₁ = 0.5), a raport P3 podaje J dla pięciu wag (`ALGORITHM.md`, punkt 20).*
 6. **Hipoteza o szybszym N1 się nie potwierdziła.** t₉₀ wynosi 790 ± 109 wobec 816 ± 112 w N2, p = 0.70 (`ALGORITHM.md`, punkt 12).
 
 **Zastrzeżenie:** wstępny opis projektu (PDF) nie wspomina o nagrodach, a `MILESTONES.md` ma tylko „ustalone funkcje nagrody”, bez cytatu. Nie wiemy, co dokładnie miał na myśli prowadzący, dlatego sekcja 5 zawiera pytanie do niego. Obecne N1 i N2 oraz wyniki P1 i P2 pozostają poprawne jako pomiary niezależnie od odpowiedzi.
@@ -73,9 +73,13 @@ Osobna gałąź `adpawel/feat/reward-signals`, po scaleniu `feat/metrics-experim
 
 **Testy:** znane wartości Δτ dla każdego sygnału, brak śladu przy `n = 0` we wszystkich wariantach, poprawne `L` na korytarzu z `tests/test_metrics.py`, znane wartości `J` oraz przebieg poniżej progu.
 
+**Stan:** wszystkie punkty 1–6 zrobione na gałęzi `feat/reward-signals`. q_s skalibrowano na ziarnach 100–109: 215 na Miasteczku i 105 na mapie testowej (`tools/calibrate_speed_deposit.py`).
+
 **Weryfikacja:** `source` musi odtworzyć dokładnie N1 z `ALGORITHM.md`, punkt 12 (t₅₀ 308, t₉₀ 790, Gini 0.398, pełna zbiórka 29/30). Inny wynik oznacza, że zmiana naruszyła bazowy przebieg. Następnie pełny eksperiment na ziarnach 0–29, `pytest` i `ruff`.
 
 Wynik negatywny też jest wynikiem: jeśli sygnały nie zmienią istotnie t₉₀ ani Giniego, zapisujemy to wprost.
+
+**Wynik:** `source` odtwarza N1 dokładnie (t₅₀ 308, t₉₀ 790, Gini 0.398, 29/30). Pomiar główny był na Miasteczku (ziarna 200–229, jak pozostałe porównania od punktu 14), a powtórzeniowy na mapie testowej (ziarna 0–29). W obu żaden z trzech testów nie jest istotny. Cztery sygnały dają prawie tę samą kolonię, a J zależy od wag: przy w₁ ≤ 0.25 wygrywa losowy spacer, przy w₁ ≥ 0.5 warianty ACO, które różnią się między sobą o mniej niż 0.01.
 
 ## 5. Pytanie do prowadzącego
 
@@ -83,5 +87,7 @@ Wynik negatywny też jest wynikiem: jeśli sygnały nie zmienią istotnie t₉�
 
 - **Tylko kryterium:** wystarczy policzyć `J` i jasno opisać sukces. Warianty śladu są opcjonalne.
 - **Wpływ na zachowanie:** wdrażamy sekcję 4. Warto też dopytać, czy N2 ma zostać jako porównanie, skoro nie jest ACO.
+
+**Po pomiarze P3:** nawet gdyby nagroda miała wpływać na zachowanie, sygnały śladu tego nie osiągają, więc różnicę między celami dają tylko reguły (ślad w N1 kontra pamięć prywatna w N2).
 
 **Co mówimy na zajęciach do czasu odpowiedzi:** cel kolonii to jak najszybsze zebranie puszek, sukces mierzymy przez t₉₀, a N1 i N2 to ręcznie napisane reguły inspirowane tymi nagrodami.
