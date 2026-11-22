@@ -793,7 +793,7 @@ def format_sweep_summary(runs: pd.DataFrame) -> str:
     header += ["Gini", "Reached 90%"]
 
     def row_cells(row) -> list:
-        cells = [row.value, row.variant, _with_ci(row.t_90_mean, row.t_90_ci, 0)]
+        cells = [f"{row.value:g}", row.variant, _with_ci(row.t_90_mean, row.t_90_ci, 0)]
         if with_work:
             cells.append(_with_ci(row.work_mean, row.work_ci, 0))
         return [*cells, _with_ci(row.gini_mean, row.gini_ci, 3), f"{row.t_90_reached}/{row.runs}"]
@@ -803,7 +803,7 @@ def format_sweep_summary(runs: pd.DataFrame) -> str:
     advantage = _markdown_table(
         (symbol, "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
         (
-            (row.value, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
+            (f"{row.value:g}", f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
             for row in aco_advantage(runs).itertuples()
         ),
     )
@@ -815,7 +815,7 @@ def format_sweep_summary(runs: pd.DataFrame) -> str:
         (symbol, *(("Pairs",) if paired else ()), "p-value", "Bonferroni threshold", "Significant"),
         (
             (
-                row.value,
+                f"{row.value:g}",
                 *((row.pairs,) if paired else ()),
                 f"{row.p_value:.3g}",
                 f"{row.threshold:.3g}",
@@ -860,7 +860,7 @@ def _format_trail_sweep(
         ),
         (
             (
-                row.value,
+                f"{row.value:g}",
                 row.pairs,
                 f"{row.t_90_ratio:.2f}",
                 f"{row.p_value:.3g}",
