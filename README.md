@@ -107,4 +107,4 @@ Project documents are in Polish.
 - [`ALGORITHM.md`](ALGORITHM.md): formulas, decisions and results
 - [`NAGRODY.md`](NAGRODY.md): open problems with rewards and proposed trail variants
 - [`ZMIANY_ZAJECIA3.md`](ZMIANY_ZAJECIA3.md): changes since the second class (comparisons P4, P5 and P6)
-- [`docs/`](docs): class documents: the initial project description (`aiin_wstepny_opis.pdf`), the documentation and slides of the second class, and the documentation updated for the third class (`aiin_dokumentacja_zajecia3.docx`)
+- [`docs/`](docs): class documents: the initial project description (`aiin_wstepny_opis.pdf`), the documentation and slides of the second class, and the documentation and slides of the third class (`aiin_dokumentacja_zajecia3.docx`, `aiin_prezentacja_zajecia3.pptx`)
