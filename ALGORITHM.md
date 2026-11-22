@@ -591,3 +591,42 @@ Pomiar z 16 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --firs
 | ACO N1 dzieli puszki mniej równo niż losowy spacer | **Tak.** Tylko przy dużych skupiskach (`few-large`, `current`). Potwierdza to obserwację z kontroli w punkcie 14 (p = 0.064 przy rozproszonym układzie) |
 | N1 i N2 są równie szybkie | **Częściowo, opisowo.** Przy `current` i `uniform` średnie są bliskie. Przy `few-large` (1491 wobec 2089) i `many-small` (2278 wobec 3549) N1 jest średnio szybsze, przy `many-small` przedziały prawie się rozłączają. Tej pary nie testowaliśmy, więc to tylko wskazówka, że wniosek „równie szybkie” może być własnością obecnego układu |
 | N2 dzieli puszki najmniej równo | **Kierunek się utrzymuje** przy każdym układzie, ale różnica maleje z rozproszeniem (0.820 przy `few-large`, 0.348 przy `uniform`). Opisowo, bez testu |
+
+## 18. Pojemność worka k i promień widzenia r (P7, P8)
+
+**Pytanie:** czy wnioski z punktu 14 zależą od dwóch założeń o agencie: ile puszek mieści worek (k) i jak daleko agent widzi (r). To pytania z `MILESTONES.md` (Część II): „mało dużych kursów kontra dużo małych” i „ile daje feromon, gdy agenci dobrze widzą”. Dalsza część analizy wrażliwości zapowiedzianej na slajdzie 8 prezentacji z zajęć 2, po liczbie agentów (punkt 16).
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| Mapa, scenariusz | Miasteczko, statyczny | Jedna zmienna naraz, jak w punkcie 16 |
+| k (P7) | 2, 5, 10, 20, 40 | Pięć wartości jak przy N, prawie podwojenia. k = 10 to wartość domyślna, a k = 40 to prawie całe skupisko (45 puszek) |
+| r (P8) | 1, 2, 4, 8 | Podwojenia. r = 2 to wartość domyślna. Przy r = 8 agent widzi okno 17 × 17, czyli całe skupisko (σ = 2) |
+| Pozostałe parametry | wartości domyślne z `config.py`: N = 20, układ z punktu 13, ziarna 200–229, T = 20000, trzy warianty | Zmienia się tylko jeden parametr. Nie ma siatek k × r |
+| Kontrola | przebiegi przy k = 10 i przy r = 2 muszą być identyczne z `results/campus` (punkt 14) | Wartość domyślna nie może zmienić losowania |
+| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich i liczba ziaren, na których N1 jest szybsze, jak w punktach 16 i 17 | Ta sama miara co w P5 i P6 |
+| Testy | tylko t₉₀ ACO N1 / losowy spacer, jeden test na wartość parametru: 5 testów dla k (próg 0.05 / 5 = 0.01) i 4 dla r (próg 0.05 / 4 = 0.0125). Korekta Bonferroniego osobno dla każdego parametru, jak w P5 | Mało testów, wybranych przed pomiarem. N2 i Gini podajemy tylko opisowo |
+| Rodzaj testu | **dwustronny test Wilcoxona dla par**, para to to samo ziarno w obu wariantach, `zero_method="wilcox"`, jak w punkcie 17 | Warianty mają te same mapy, więc test parami ma większą moc. P5 zostaje przy teście Manna-Whitneya, z którym je zaplanowano. Wybór jest ostateczny |
+
+Przebieg poniżej 90% liczy się jako T, jak w punkcie 11.
+
+**Hipotezy dla k (P7):**
+
+1. **t₉₀ maleje z k we wszystkich wariantach.** Mniej kursów to mniej chodzenia między bazą a skupiskiem. Najmocniej zyskuje losowy spacer, bo po każdym powrocie musi znaleźć skupisko od nowa.
+2. **Przewaga ACO N1 maleje z k:** stosunek t₉₀ jest największy przy k = 2, a najmniejszy przy k = 40. Przy małym k agent często wraca do bazy i za każdym razem znakuje drogę do skupiska, a ślad i pamięć pozwalają do niego wrócić. Przy dużym k jeden agent zabiera dużą część skupiska za jednym razem, więc ślad rzadziej ma do czego prowadzić. Różnica t₉₀ jest istotna po korekcie przy każdym k.
+
+**Hipotezy dla r (P8):**
+
+1. **t₉₀ maleje z r we wszystkich wariantach**, bo agent wcześniej zauważa puszki.
+2. **Przewaga ACO N1 maleje z r:** stosunek jest największy przy r = 1, a najmniejszy przy r = 8. Gdy agent widzi daleko, sam szybko znajduje skupisko, więc ślad daje mniej. Różnica t₉₀ jest istotna po korekcie przy każdym r.
+
+Spadki stosunków między wartościami opisujemy tylko opisowo, bez testu trendu, jak w punktach 16 i 17.
+
+**Zastrzeżenia znane przed pomiarem:**
+
+- **r zmienia nie tylko widzenie.** n (siła śladu, punkt 2) to puszki w oknie o promieniu r, więc przy większym r ślad jest mocniejszy, a pamięć N2 (punkt 9) ocenia źródło po większym oknie. Tego nie rozdzielamy: P8 mierzy łączny skutek promienia.
+- **k działa razem z cierpliwością S = 50.** Agent wraca z niepełnym workiem, gdy przez S kroków nie zobaczy nowej puszki, więc przy dużym k część kursów i tak kończy się przed zapełnieniem worka.
+- **Cenzurowanie przy T.** Gdy losowy spacer często nie osiąga 90% (np. przy r = 1 albo k = 2), jego t₉₀ liczymy jako T, więc przewaga ACO jest wtedy zaniżona, jak przy N = 5 w punkcie 16. Podajemy liczbę przebiegów, które osiągnęły 90%.
+
+**Kod:** `--sweep PARAMETR WARTOŚCI` w `experiments.py` uogólnia `--n-agents` z punktu 16 (`--n-agents 5 10` to to samo co `--sweep n_agents 5 10`). Zmienia jeden parametr z `SWEEPS`: `n_agents`, `bag_capacity`, `vision_radius`, `evaporation_rate`, `pheromone_alpha` albo `exploration_rate`. Każdy przegląd trafia do własnego katalogu, `results/<mapa>_bag`, `results/<mapa>_vision` itd., także gdy zawiera wartość domyślną. `runs.csv` ma trzy nowe kolumny: `r` (promień widzenia), `sweep` (nazwa zmienianego parametru, pusta poza przeglądem) i `sweep_value` (jego wartość w przebiegu). Druga i trzecia są potrzebne, bo `rho`, `alpha` i `eps` wypełniamy tylko dla N1 (punkt 11), więc bez nich losowego spaceru i N2 nie dałoby się przypisać do wartości parametru. Raport w `plots.py` działa dla dowolnego parametru: tabela t₉₀ i Giniego, przewaga ACO i testy. Nakład `N · t₉₀` pokazuje tylko dla liczby agentów, bo dla pozostałych parametrów nie ma sensu, a zamiast wykresu nakładu rysuje Giniego. Pliki starszego pomiaru P5, bez nowych kolumn, raport nadal rozpoznaje po kilku wartościach `n_agents`.
