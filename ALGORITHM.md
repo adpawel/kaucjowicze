@@ -742,4 +742,4 @@ Test Wilcoxona dla par, we wszystkich testach 30 par.
 2. **α:** przy α = 0.5 N1 jest istotnie wolniejsze, bo słaby ślad częściej przegrywa z losowym ruchem. Przy α = 2 i 4 różnica nie jest istotna, bo już przy α = 1 ślad o sile 1 dostaje 94% wagi (punkt 4).
 3. **ε:** żadna różnica nie jest istotna. ε działa tylko na komórkach ze śladem (punkt 5), a ślad i tak zanika, gdy skupisko się wyczerpie.
 
-**Zastrzeżenie:** ρ zmienia też to, jak długo ślad przeżywa drogę. Przy ρ = 0.05 ślad o sile 5 spada do τ₀ po około 104 krokach, a najdalsza komórka Miasteczka jest 80 kroków od bazy, więc ślad do dalekiego skupiska może zniknąć, zanim ktoś za nim pójdzie.
+**Zastrzeżenie:** ρ zmienia też to, jak długo ślad przeżywa drogę. Przy ρ = 0.05 ślad o sile 5 spada do τ₀ po około 121 krokach, a najdalsza komórka Miasteczka jest 80 kroków od bazy, więc ślad do dalekiego skupiska może zniknąć, zanim ktoś za nim pójdzie.
