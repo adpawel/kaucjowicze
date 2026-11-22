@@ -932,3 +932,28 @@ Agenci jednego przebiegu nie są niezależni, dlatego jednostką testu zarobku j
 
 1. **Egoiści zarabiają istotnie więcej niż współpracujący przy każdym e = 0.25, 0.5, 0.75.** Korzystają ze śladów innych, a potem wracają do swojego najlepszego źródła i nie ustępują przed tłokiem.
 2. **t₉₀ kolonii nie zmienia się istotnie przy żadnym e.** W P2 N1 i N2 były równie szybkie (punkt 14), więc mieszanka nie powinna być wolniejsza od żadnego z nich. „Załamanie współpracy” spodziewamy się zobaczyć w podziale, a nie w tempie: Gini rośnie z e od wartości N1 (0.516) do wartości N2 (0.689), co podajemy opisowo.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep egoist_share 0 0.25 0.5 0.75 1` (450 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_mixed`. Średnia ± 95%.
+
+**Kontrola:** przy e = 0 przebiegi ACO N1 są identyczne z N1 z punktu 14, a przy e = 1 z N2 z punktu 14 (t₉₀, Gini, liczba kroków i długość tras w każdym przebiegu).
+
+| Udział egoistów e | t₉₀ kolonii | Gini | Puszki na egoistę | Puszki na współpracującego | Egoista / współpracujący | Egoiści lepsi w | p (t₉₀, e / e = 0) | p (zarobek) |
+|---|---|---|---|---|---|---|---|---|
+| 0 (N1) | 2439 ± 559 | 0.516 ± 0.027 | — | 13.5 | — | — | — | — |
+| 0.25 | 1968 ± 518 | 0.559 ± 0.031 | 20.4 ± 2.3 | 11.2 ± 0.8 | 1.81 | 27/30 | 0.15 | 2.6 · 10⁻⁵ ✓ |
+| 0.5 | 2197 ± 806 | 0.610 ± 0.026 | 17.1 ± 1.5 | 9.9 ± 1.5 | 1.72 | 26/30 | 0.38 | 2.1 · 10⁻⁴ ✓ |
+| 0.75 | 2271 ± 584 | 0.628 ± 0.028 | 15.0 ± 0.5 | 9.0 ± 1.5 | 1.67 | 25/30 | 0.70 | 2.1 · 10⁻⁵ ✓ |
+| 1 (N2) | 2360 ± 471 | 0.689 ± 0.027 | 13.5 | — | — | — | 0.97 | — |
+
+✓ oznacza wynik istotny po korekcie Bonferroniego na 7 testów (próg 0.0071). Test Wilcoxona dla par, w każdym teście 30 par. Przy e = 0 i e = 1 średnia na agenta to zawsze 270 / 20 = 13.5, bo zebrano wszystkie puszki.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się.** Egoiści zarabiają istotnie więcej niż współpracujący przy każdym udziale, około 1.7–1.8 razy więcej, i są lepsi w 25–27 z 30 przebiegów.
+- **Egoiści zarabiają kosztem grupy.** Współpracujący w kolonii mieszanej oddają średnio 9.0–11.2 puszki, mniej niż 13.5, które przypadałyby na agenta przy równym podziale (linia na `p10_earnings.png`). Egoista, który przyszedł po cudzym śladzie, zapamiętuje źródło i wraca do niego najkrótszą drogą, więc zabiera puszki, do których ślad prowadził współpracujących.
+- **Przewaga egoisty maleje, gdy egoistów przybywa** (20.4 puszki przy e = 0.25, 15.0 przy e = 0.75), bo jest mniej śladów, z których można korzystać. Opisowo, bez testu.
+- **Hipoteza 2 potwierdza się:** tempo kolonii nie zmienia się istotnie przy żadnym udziale. **Współpraca nie załamuje się więc w tempie, tylko w podziale:** Gini rośnie z e monotonicznie od 0.516 do 0.689. Z punktu widzenia całej kolonii egoiści nie szkodzą, ale z punktu widzenia współpracujących się nie opłacają.
+- **Mieszanka jest średnio najszybsza przy e = 0.25** (1968 wobec 2439 w N1), ale bez istotnej różnicy (p = 0.15). Możliwe, że egoiści przyspieszają opróżnianie znanych skupisk, a współpracujący dalej je znakują, ale tego nie sprawdzaliśmy.
+- **To pierwsze porównanie, w którym nagroda naprawdę zmienia wynik w tej samej kolonii:** reguła wynikająca z nagrody indywidualnej daje agentowi wyraźną przewagę nad agentem z nagrodą wspólną. W P3 zmiana samej siły śladu niczego nie zmieniała (punkt 20).
