@@ -16,7 +16,7 @@ MAP_DEFAULTS = {
         "max_steps": 3000,
         "event_start": 250,
         "event_interval": 250,
-        "speed_deposit": 1.0,  # placeholder until calibrated (ALGORITHM.md, point 20)
+        "speed_deposit": 105.0,  # q_s calibrated on seeds 100-109 (ALGORITHM.md, point 20),
     },
     CAMPUS_MAP: {
         "cans_per_cluster": 45,
@@ -25,7 +25,7 @@ MAP_DEFAULTS = {
         "max_steps": 20000,
         "event_start": 1000,
         "event_interval": 1000,
-        "speed_deposit": 1.0,  # placeholder until calibrated (ALGORITHM.md, point 20)
+        "speed_deposit": 215.0,  # q_s calibrated on seeds 100-109 (ALGORITHM.md, point 20),
     },
 }
 # The dynamic scenario starts with half of the clusters and adds the rest as parties during a run,
