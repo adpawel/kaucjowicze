@@ -2,7 +2,7 @@
 
 Ten plik opisuje prace od prezentacji na zajęcia 2 (`docs/aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 16 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** wszystko z tego pliku jest scalone z `master`: scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19).
+**Stan:** scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19) są scalone z `master`. Analiza wrażliwości na worek, promień widzenia i parametry śladu (P7, P8, P9, issue #17) jest na gałęzi `feat/sensitivity`.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -11,7 +11,7 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 | Kierunek | Stan |
 |---|---|
 | nagroda, która zmienia ilość zostawianego śladu, i cel J | nie zaczęte (plan w `NAGRODY.md`, porównanie P3) |
-| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **liczba agentów zrobiona (porównanie P5, `ALGORITHM.md` §16)**, **układ puszek zrobiony (porównanie P6, §17)**, pozostałe parametry nie zaczęte |
+| analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **zrobione:** liczba agentów (P5, `ALGORITHM.md` §16), układ puszek (P6, §17), worek i promień widzenia (P7, P8, §18), ρ, α i ε (P9, §19) |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
 | populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
 
@@ -74,7 +74,7 @@ Miasteczko, ziarna 200–229, T = 20000. Podajemy średnią ± przedział 95%.
 | `plots.py` | porównanie P4: `p4_cans_on_map.png`, `p4_party_latency.png` i tabele w `summary.md` |
 | `__main__.py`, `view.py` | opcja `--scenario` w podglądzie, licznik imprez w pasku stanu |
 
-Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
+Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397, a po P7–P9 422. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
 
 Po przeglądzie kodu dodaliśmy kilka poprawek. Nie zmieniły wyników P4, bo w pomiarze nie było imprez niezebranych do limitu:
 - brak pierwszego podniesienia jest cenzurowany tak samo jak brak 50%,
@@ -177,8 +177,65 @@ done
 python -m kaucjowicze.plots --input results/campus_layout_* --output results/campus_layouts
 ```
 
+## Worek i promień widzenia (P7, P8)
+
+**Pytanie:** czy wnioski zależą od pojemności worka k i promienia widzenia r. Zmieniamy jeden parametr naraz, reszta jak w P1, P2 i P5 (Miasteczko, scenariusz statyczny, N = 20, ziarna 200–229, T = 20000). Szczegóły są w `ALGORITHM.md` §18.
+
+**Wartości:** k = 2, 5, 10, 20, 40 i r = 1, 2, 4, 8, razem 810 przebiegów.
+
+**Hipotezy (zapisane przed pomiarem):**
+- t₉₀ maleje z k i z r we wszystkich wariantach,
+- przewaga ACO maleje z k (rzadsze powroty, czyli rzadsze znakowanie) i z r (agent sam widzi skupisko), ale jest istotna przy każdej wartości.
+
+**Testy:** t₉₀ ACO N1 / losowy spacer, jeden test na wartość, test Wilcoxona dla par (to samo ziarno), korekta Bonferroniego osobno dla k (5 testów) i r (4 testy).
+
+## Wyniki P7 i P8
+
+| k | t₉₀ losowy | t₉₀ ACO N1 | t₉₀ N2 | losowy / ACO N1 | p (t₉₀) |
+|---|---|---|---|---|---|
+| 2 | 18498 ± 1350 | 2964 ± 601 | 4166 ± 977 | 6.24 | 1.9 · 10⁻⁹ ✓ |
+| 5 | 13273 ± 2017 | 2299 ± 582 | 2685 ± 620 | 5.77 | 3.7 · 10⁻⁹ ✓ |
+| 10 | 7257 ± 1588 | 2439 ± 559 | 2360 ± 471 | 2.98 | 1.3 · 10⁻⁸ ✓ |
+| 20 | 4762 ± 1121 | 1776 ± 549 | 2144 ± 504 | 2.68 | 1.8 · 10⁻⁵ ✓ |
+| 40 | 2459 ± 554 | 1993 ± 566 | 2354 ± 705 | 1.23 | 0.18 |
+
+| r | t₉₀ losowy | t₉₀ ACO N1 | t₉₀ N2 | losowy / ACO N1 | p (t₉₀) |
+|---|---|---|---|---|---|
+| 1 | 7727 ± 1766 | 2287 ± 775 | 3147 ± 629 | 3.38 | 8.0 · 10⁻⁸ ✓ |
+| 2 | 7257 ± 1588 | 2439 ± 559 | 2360 ± 471 | 2.98 | 1.3 · 10⁻⁸ ✓ |
+| 4 | 5146 ± 831 | 1726 ± 660 | 2027 ± 485 | 2.98 | 4.4 · 10⁻⁶ ✓ |
+| 8 | 4360 ± 1188 | 1537 ± 528 | 1425 ± 497 | 2.84 | 2.8 · 10⁻⁶ ✓ |
+
+✓ oznacza wynik istotny po korekcie Bonferroniego.
+
+**Wnioski:**
+- **Przewaga ACO mocno zależy od worka:** maleje z 6.2 przy k = 2 do 1.2 przy k = 40, a przy k = 40 przestaje być istotna. Przy dużym worku agent zbiera wszystko w okolicy (średnio 17 puszek na kurs, bo wcześniej kończy się cierpliwość S) i wraca, a więc i znakuje, o połowę rzadziej.
+- **t₉₀ maleje z k tylko w losowym spacerze** (z 18498 do 2459). ACO i N2 są prawie tak samo szybkie od k = 5 do 40, bo pamiętają drogę do skupiska i mało tracą na częstych powrotach.
+- **Przewaga ACO prawie nie zależy od promienia widzenia** (2.8–3.4) i jest istotna przy każdym r. Hipoteza o malejącej przewadze potwierdza się tylko formalnie: największa przy r = 1, najmniejsza przy r = 8.
+- **N1 i N2 są równie szybkie** przy k ≥ 5 i r ≥ 2. Przy k = 2 i r = 1 N1 jest średnio szybsze (bez testu).
+- Kontrola: przebiegi przy k = 10 i r = 2 są identyczne z wynikami z P1 i P2.
+
+## Parametry śladu (P9)
+
+**Pytanie:** czy wartości domyślne ρ, α i ε, nigdy nie strojone na Miasteczku, są rozsądne. Część opcjonalna z issue #17, zrobiona po opisaniu P7 i P8. Szczegóły są w `ALGORITHM.md` §19.
+
+**Wartości:** ρ = 0.005, 0.01, 0.02, 0.05, α = 0.5, 1, 2, 4 i ε = 0, 0.05, 0.1, 0.3. Te parametry zmieniają tylko ACO N1, więc testujemy N1 przy każdej wartości wobec N1 przy wartości domyślnej (Wilcoxon dla par, Bonferroni na 3 testy dla każdego parametru).
+
+**Wynik:** żadna różnica nie jest istotna. t₉₀ ACO N1 mieści się w 1885–2901 przy każdej wartości, a przewaga nad losowym spacerem w 2.5–3.9. Wbrew hipotezom ani bardzo wolne parowanie (ρ = 0.005, o 19% wolniej, p = 0.28), ani słaby ślad (α = 0.5, p = 0.82) nie spowalniają N1 istotnie. N1 jest więc mało wrażliwe na parametry śladu, a 30 ziaren nie wykrywa różnic mniejszych niż około 20–30%.
+
+**Zmiany w kodzie:** opcja `--sweep PARAMETR WARTOŚCI` w `experiments.py` uogólnia `--n-agents` (`n_agents`, `bag_capacity`, `vision_radius`, `evaporation_rate`, `pheromone_alpha`, `exploration_rate`), nowe kolumny `r`, `sweep` i `sweep_value` w `runs.csv`, raport dowolnego przeglądu w `plots.py` (tabele w `summary.md`, wykresy `p7_*.png`, `p8_*.png`, `p9_*.png`). P5 zostaje przy teście Manna-Whitneya i swoich plikach, a ponowny pomiar P5 daje te same liczby co w §16.
+
+```
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep bag_capacity 2 5 10 20 40
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep vision_radius 1 2 4 8
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep evaporation_rate 0.005 0.01 0.02 0.05
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep pheromone_alpha 0.5 1 2 4
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep exploration_rate 0 0.05 0.1 0.3
+python -m kaucjowicze.plots --input results/campus_bag      # i tak samo _vision, _rho, _alpha, _eps
+```
+
 ## Co zostało do zrobienia
 
 - metryka przywiązania do wyczerpanych skupisk w P4: ile czasu agenci spędzają przy pustych źródłach,
-- analiza wrażliwości na ρ, α, ε, worek i promień widzenia,
-- pozostałe dwa kierunki z tabeli na początku pliku.
+- nagroda, która zmienia ilość zostawianego śladu, i cel J (porównanie P3, issue #7),
+- populacja mieszana i ograniczenia śladu z MAX–MIN Ant System.

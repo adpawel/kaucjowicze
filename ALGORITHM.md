@@ -591,3 +591,186 @@ Pomiar z 16 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --firs
 | ACO N1 dzieli puszki mniej równo niż losowy spacer | **Tak.** Tylko przy dużych skupiskach (`few-large`, `current`). Potwierdza to obserwację z kontroli w punkcie 14 (p = 0.064 przy rozproszonym układzie) |
 | N1 i N2 są równie szybkie | **Częściowo, opisowo.** Przy `current` i `uniform` średnie są bliskie. Przy `few-large` (1491 wobec 2089) i `many-small` (2278 wobec 3549) N1 jest średnio szybsze, przy `many-small` przedziały prawie się rozłączają. Tej pary nie testowaliśmy, więc to tylko wskazówka, że wniosek „równie szybkie” może być własnością obecnego układu |
 | N2 dzieli puszki najmniej równo | **Kierunek się utrzymuje** przy każdym układzie, ale różnica maleje z rozproszeniem (0.820 przy `few-large`, 0.348 przy `uniform`). Opisowo, bez testu |
+
+## 18. Pojemność worka k i promień widzenia r (P7, P8)
+
+**Pytanie:** czy wnioski z punktu 14 zależą od dwóch założeń o agencie: ile puszek mieści worek (k) i jak daleko agent widzi (r). To pytania z `MILESTONES.md` (Część II): „mało dużych kursów kontra dużo małych” i „ile daje feromon, gdy agenci dobrze widzą”. Dalsza część analizy wrażliwości zapowiedzianej na slajdzie 8 prezentacji z zajęć 2, po liczbie agentów (punkt 16).
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| Mapa, scenariusz | Miasteczko, statyczny | Jedna zmienna naraz, jak w punkcie 16 |
+| k (P7) | 2, 5, 10, 20, 40 | Pięć wartości jak przy N, prawie podwojenia. k = 10 to wartość domyślna, a k = 40 to prawie całe skupisko (45 puszek) |
+| r (P8) | 1, 2, 4, 8 | Podwojenia. r = 2 to wartość domyślna. Przy r = 8 agent widzi okno 17 × 17, czyli całe skupisko (σ = 2) |
+| Pozostałe parametry | wartości domyślne z `config.py`: N = 20, układ z punktu 13, ziarna 200–229, T = 20000, trzy warianty | Zmienia się tylko jeden parametr. Nie ma siatek k × r |
+| Kontrola | przebiegi przy k = 10 i przy r = 2 muszą być identyczne z `results/campus` (punkt 14) | Wartość domyślna nie może zmienić losowania |
+| Przewaga ACO | `t₉₀(losowy) / t₉₀(ACO N1)` ze średnich i liczba ziaren, na których N1 jest szybsze, jak w punktach 16 i 17 | Ta sama miara co w P5 i P6 |
+| Testy | tylko t₉₀ ACO N1 / losowy spacer, jeden test na wartość parametru: 5 testów dla k (próg 0.05 / 5 = 0.01) i 4 dla r (próg 0.05 / 4 = 0.0125). Korekta Bonferroniego osobno dla każdego parametru, jak w P5 | Mało testów, wybranych przed pomiarem. N2 i Gini podajemy tylko opisowo |
+| Rodzaj testu | **dwustronny test Wilcoxona dla par**, para to to samo ziarno w obu wariantach, `zero_method="wilcox"`, jak w punkcie 17 | Warianty mają te same mapy, więc test parami ma większą moc. P5 zostaje przy teście Manna-Whitneya, z którym je zaplanowano. Wybór jest ostateczny |
+
+Przebieg poniżej 90% liczy się jako T, jak w punkcie 11.
+
+**Hipotezy dla k (P7):**
+
+1. **t₉₀ maleje z k we wszystkich wariantach.** Mniej kursów to mniej chodzenia między bazą a skupiskiem. Najmocniej zyskuje losowy spacer, bo po każdym powrocie musi znaleźć skupisko od nowa.
+2. **Przewaga ACO N1 maleje z k:** stosunek t₉₀ jest największy przy k = 2, a najmniejszy przy k = 40. Przy małym k agent często wraca do bazy i za każdym razem znakuje drogę do skupiska, a ślad i pamięć pozwalają do niego wrócić. Przy dużym k jeden agent zabiera dużą część skupiska za jednym razem, więc ślad rzadziej ma do czego prowadzić. Różnica t₉₀ jest istotna po korekcie przy każdym k.
+
+**Hipotezy dla r (P8):**
+
+1. **t₉₀ maleje z r we wszystkich wariantach**, bo agent wcześniej zauważa puszki.
+2. **Przewaga ACO N1 maleje z r:** stosunek jest największy przy r = 1, a najmniejszy przy r = 8. Gdy agent widzi daleko, sam szybko znajduje skupisko, więc ślad daje mniej. Różnica t₉₀ jest istotna po korekcie przy każdym r.
+
+Spadki stosunków między wartościami opisujemy tylko opisowo, bez testu trendu, jak w punktach 16 i 17.
+
+**Zastrzeżenia znane przed pomiarem:**
+
+- **r zmienia nie tylko widzenie.** n (siła śladu, punkt 2) to puszki w oknie o promieniu r, więc przy większym r ślad jest mocniejszy, a pamięć N2 (punkt 9) ocenia źródło po większym oknie. Tego nie rozdzielamy: P8 mierzy łączny skutek promienia.
+- **k działa razem z cierpliwością S = 50.** Agent wraca z niepełnym workiem, gdy przez S kroków nie zobaczy nowej puszki, więc przy dużym k część kursów i tak kończy się przed zapełnieniem worka.
+- **Cenzurowanie przy T.** Gdy losowy spacer często nie osiąga 90% (np. przy r = 1 albo k = 2), jego t₉₀ liczymy jako T, więc przewaga ACO jest wtedy zaniżona, jak przy N = 5 w punkcie 16. Podajemy liczbę przebiegów, które osiągnęły 90%.
+
+**Kod:** `--sweep PARAMETR WARTOŚCI` w `experiments.py` uogólnia `--n-agents` z punktu 16 (`--n-agents 5 10` to to samo co `--sweep n_agents 5 10`). Zmienia jeden parametr z `SWEEPS`: `n_agents`, `bag_capacity`, `vision_radius`, `evaporation_rate`, `pheromone_alpha` albo `exploration_rate`. Każdy przegląd trafia do własnego katalogu, `results/<mapa>_bag`, `results/<mapa>_vision` itd., także gdy zawiera wartość domyślną. `runs.csv` ma trzy nowe kolumny: `r` (promień widzenia), `sweep` (nazwa zmienianego parametru, pusta poza przeglądem) i `sweep_value` (jego wartość w przebiegu). Druga i trzecia są potrzebne, bo `rho`, `alpha` i `eps` wypełniamy tylko dla N1 (punkt 11), więc bez nich losowego spaceru i N2 nie dałoby się przypisać do wartości parametru. Raport w `plots.py` działa dla dowolnego parametru: tabela t₉₀ i Giniego, przewaga ACO i testy. Nakład `N · t₉₀` pokazuje tylko dla liczby agentów, bo dla pozostałych parametrów nie ma sensu, a zamiast wykresu nakładu rysuje Giniego. Pliki starszego pomiaru P5, bez nowych kolumn, raport nadal rozpoznaje po kilku wartościach `n_agents`.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep bag_capacity 2 5 10 20 40` (450 przebiegów) i `--sweep vision_radius 1 2 4 8` (360 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_bag` i `--input results/campus_vision`. Średnia ± 95%. Przebieg poniżej 90% liczy się jako T.
+
+**Kontrola:** przebiegi przy k = 10 i przy r = 2 mają te same wartości we wszystkich wspólnych kolumnach `runs.csv` co pomiar z punktu 14, a ich `timeline.csv` i `agents.csv` są identyczne.
+
+#### Pojemność worka k (P7)
+
+| k | Wariant | t₉₀ | Gini | Osiągnęło 90% | Kursy | Puszki na kurs |
+|---|---|---|---|---|---|---|
+| 2 | losowy spacer | 18498 ± 1350 | 0.229 ± 0.017 | 6/30 | 110 | 2.0 |
+| 2 | ACO N1 | 2964 ± 601 | 0.363 ± 0.030 | 30/30 | 138 | 2.0 |
+| 2 | N2 | 4166 ± 977 | 0.562 ± 0.028 | 30/30 | 138 | 2.0 |
+| 5 | losowy spacer | 13273 ± 2017 | 0.328 ± 0.022 | 23/30 | 53 | 4.7 |
+| 5 | ACO N1 | 2299 ± 582 | 0.468 ± 0.031 | 30/30 | 58 | 4.6 |
+| 5 | N2 | 2685 ± 620 | 0.648 ± 0.028 | 30/30 | 58 | 4.6 |
+| 10 | losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | 29/30 | 33 | 8.3 |
+| 10 | ACO N1 | 2439 ± 559 | 0.516 ± 0.027 | 30/30 | 34 | 8.1 |
+| 10 | N2 | 2360 ± 471 | 0.689 ± 0.027 | 30/30 | 33 | 8.2 |
+| 20 | losowy spacer | 4762 ± 1121 | 0.543 ± 0.029 | 30/30 | 22 | 12.7 |
+| 20 | ACO N1 | 1776 ± 549 | 0.596 ± 0.025 | 30/30 | 23 | 12.3 |
+| 20 | N2 | 2144 ± 504 | 0.714 ± 0.024 | 30/30 | 21 | 13.2 |
+| 40 | losowy spacer | 2459 ± 554 | 0.667 ± 0.023 | 30/30 | 16 | 17.5 |
+| 40 | ACO N1 | 1993 ± 566 | 0.678 ± 0.024 | 30/30 | 17 | 16.7 |
+| 40 | N2 | 2354 ± 705 | 0.734 ± 0.021 | 30/30 | 16 | 18.0 |
+
+Kursy i puszki na kurs to średnie z przebiegów (opisowo, z `trips` i `cans_at_T`).
+
+| k | t₉₀ losowy / t₉₀ ACO N1 | N1 szybsze na | p (t₉₀, N1 / losowy) | Istotne po korekcie (próg 0.01) |
+|---|---|---|---|---|
+| 2 | 6.24 | 30/30 | 1.9 · 10⁻⁹ | tak |
+| 5 | 5.77 | 29/30 | 3.7 · 10⁻⁹ | tak |
+| 10 | 2.98 | 28/30 | 1.3 · 10⁻⁸ | tak |
+| 20 | 2.68 | 25/30 | 1.8 · 10⁻⁵ | tak |
+| 40 | 1.23 | 19/30 | 0.18 | nie |
+
+Test Wilcoxona dla par, we wszystkich testach 30 par.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się tylko dla losowego spaceru.** Jego t₉₀ spada z k monotonicznie i bardzo mocno, od 18498 przy k = 2 do 2459 przy k = 40. ACO N1 i N2 zyskują tylko między k = 2 a k = 5–10, a dalej ich t₉₀ jest prawie stałe (N1: 1776–2439, N2: 2144–2360, przedziały się nakładają). Wariant, który pamięta drogę do skupiska, mało traci na częstych powrotach, a losowy spacer płaci za każdy powrót ponownym szukaniem.
+- **Hipoteza 2 potwierdza się częściowo.** Przewaga ACO maleje z k monotonicznie: 6.2, 5.8, 3.0, 2.7, 1.2. Jest istotna po korekcie przy k od 2 do 20, ale **przy k = 40 już nie** (p = 0.18, N1 szybsze tylko na 19 z 30 map). Przewidywaliśmy istotność przy każdym k, więc ta część hipotezy się nie potwierdziła.
+- **Odpowiedź na pytanie z `MILESTONES.md`: ślad pomaga tym mniej, im rzadziej agent wraca do bazy.** Przy k = 40 kurs kończy się średnio po 17 puszkach, prawie zawsze przez cierpliwość S, a nie pełny worek. Agent zbiera więc tyle, ile znajdzie w okolicy, a skupisko opróżnia jeden lub dwóch agentów. Kursów jest o połowę mniej niż przy k = 10, więc i ślad powstaje o połowę rzadziej.
+- **Przy k = 2 przewaga ACO jest zaniżona:** losowy spacer osiągnął 90% tylko w 6 z 30 przebiegów, a resztę liczymy jako T, jak przy N = 5 w punkcie 16.
+- **Gini rośnie z k we wszystkich wariantach** (N1: od 0.363 do 0.678). Przy dużym worku kto znajdzie skupisko, ten zabiera dużą jego część. N2 dzieli najmniej równo przy każdym k, ale różnica do N1 maleje z k. Opisowo, bez testu.
+- **N1 i N2 są równie szybkie przy k ≥ 5** (przedziały się nakładają), tak jak w punkcie 14. Przy k = 2 N1 jest średnio szybsze (2964 wobec 4166), ale tej pary nie testowaliśmy.
+
+#### Promień widzenia r (P8)
+
+| r | Wariant | t₉₀ | Gini | Osiągnęło 90% |
+|---|---|---|---|---|
+| 1 | losowy spacer | 7727 ± 1766 | 0.425 ± 0.025 | 29/30 |
+| 1 | ACO N1 | 2287 ± 775 | 0.484 ± 0.024 | 30/30 |
+| 1 | N2 | 3147 ± 629 | 0.667 ± 0.027 | 30/30 |
+| 2 | losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | 29/30 |
+| 2 | ACO N1 | 2439 ± 559 | 0.516 ± 0.027 | 30/30 |
+| 2 | N2 | 2360 ± 471 | 0.689 ± 0.027 | 30/30 |
+| 4 | losowy spacer | 5146 ± 831 | 0.401 ± 0.027 | 30/30 |
+| 4 | ACO N1 | 1726 ± 660 | 0.487 ± 0.033 | 30/30 |
+| 4 | N2 | 2027 ± 485 | 0.693 ± 0.024 | 30/30 |
+| 8 | losowy spacer | 4360 ± 1188 | 0.389 ± 0.023 | 30/30 |
+| 8 | ACO N1 | 1537 ± 528 | 0.451 ± 0.033 | 30/30 |
+| 8 | N2 | 1425 ± 497 | 0.603 ± 0.034 | 30/30 |
+
+| r | t₉₀ losowy / t₉₀ ACO N1 | N1 szybsze na | p (t₉₀, N1 / losowy) | Istotne po korekcie (próg 0.0125) |
+|---|---|---|---|---|
+| 1 | 3.38 | 29/30 | 8.0 · 10⁻⁸ | tak |
+| 2 | 2.98 | 28/30 | 1.3 · 10⁻⁸ | tak |
+| 4 | 2.98 | 27/30 | 4.4 · 10⁻⁶ | tak |
+| 8 | 2.84 | 27/30 | 2.8 · 10⁻⁶ | tak |
+
+Test Wilcoxona dla par, we wszystkich testach 30 par.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się dla losowego spaceru i N2,** których t₉₀ maleje z r (losowy spacer: 7727 → 4360, N2: 3147 → 1425). W ACO N1 t₉₀ przy r = 1 jest średnio niższe niż przy r = 2 (2287 wobec 2439), ale przedziały się nakładają, więc spadek z r jest tylko ogólną tendencją (2287–2439 przy r ≤ 2, 1537 przy r = 8).
+- **Hipoteza 2 potwierdza się formalnie, ale efekt jest mały.** Stosunek jest największy przy r = 1 (3.38) i najmniejszy przy r = 8 (2.84), a ACO N1 jest istotnie szybsze przy każdym r. Przewaga prawie nie zależy jednak od promienia: między r = 2 a r = 8 zmienia się z 2.98 na 2.84.
+- **Odpowiedź na pytanie z `MILESTONES.md`: feromon pomaga prawie tak samo, gdy agenci widzą daleko.** Lepszy wzrok przyspiesza wszystkie warianty mniej więcej w tej samej proporcji. Prawdopodobnie dlatego, że przy większym r ślad też jest mocniejszy (n liczymy w większym oknie), ale tego nie rozdzielaliśmy (zastrzeżenie wyżej).
+- **N1 i N2 są równie szybkie przy r ≥ 2.** Przy r = 1 N1 jest średnio szybsze (2287 wobec 3147), co pasuje do tego, że pamięć N2 ocenia źródło po bardzo małym oknie. Tej pary nie testowaliśmy.
+- **Gini prawie nie zależy od r** (N1: 0.451–0.516), a N2 dzieli najmniej równo przy każdym r.
+
+#### Co zależy od k i r
+
+| Wniosek z punktu 14 | k (P7) | r (P8) |
+|---|---|---|
+| ACO N1 jest istotnie szybsze od losowego spaceru | **zależy:** tak przy k ≤ 20, nie przy k = 40 | nie zależy: tak przy każdym r |
+| Przewaga około 3 razy | **zależy:** od 6.2 przy k = 2 do 1.2 przy k = 40 | prawie nie zależy: 2.8–3.4 |
+| N1 i N2 są równie szybkie | przy k ≥ 5 tak, przy k = 2 N1 średnio szybsze (bez testu) | przy r ≥ 2 tak, przy r = 1 N1 średnio szybsze (bez testu) |
+| N2 dzieli puszki najmniej równo | kierunek utrzymuje się przy każdym k (opisowo) | kierunek utrzymuje się przy każdym r (opisowo) |
+
+## 19. Parametry śladu ρ, α i ε (P9)
+
+**Pytanie:** czy wartości domyślne parametrów śladu, wzięte z `MILESTONES.md` i nigdy nie strojone na Miasteczku (punkt 13), są rozsądne. Pomiar kontrolny z punktu 7 (mapa testowa, bez testu) nie odróżniał wariantów ρ i ε. Ta część analizy wrażliwości była opcjonalna i powstała dopiero po opisaniu k i r (punkt 18).
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| ρ | 0.005, 0.01, 0.02, 0.05 | Wokół wartości domyślnej 0.02. Okres połowicznego zaniku od około 138 do 14 kroków |
+| α | 0.5, 1, 2, 4 | Wokół wartości domyślnej 1. Przy α = 0.5 ślad tylko sugeruje kierunek, a przy α = 4 prawie go wyznacza |
+| ε | 0, 0.05, 0.1, 0.3 | Wokół wartości domyślnej 0.1. ε = 0 to brak odchodzenia od śladu |
+| Pozostałe parametry | jak w punkcie 18: Miasteczko, scenariusz statyczny, wartości domyślne, ziarna 200–229, T = 20000 | Zmienia się jeden parametr naraz |
+| Warianty | wszystkie trzy, ale ρ, α i ε zmieniają tylko ACO N1 | Losowy spacer i N2 są stałym punktem odniesienia. Ich przebiegi muszą być identyczne przy każdej wartości (kontrola) |
+| Testy | ACO N1 przy każdej innej wartości / ACO N1 przy wartości domyślnej, t₉₀, test Wilcoxona dla par (to samo ziarno), Bonferroni osobno dla każdego parametru na 3 testy (próg 0.05 / 3 ≈ 0.0167) | Pytanie dotyczy N1, więc porównujemy N1 z samym sobą. Przewagę nad losowym spacerem podajemy opisowo |
+
+**Hipotezy:**
+
+1. **ρ:** t₉₀ ACO N1 jest najniższe przy wartości domyślnej lub sąsiedniej. Przy ρ = 0.005 N1 jest istotnie wolniejsze, bo ślad długo prowadzi do skupisk, które już się wyczerpały. Przy ρ = 0.01 i 0.05 różnica nie jest istotna.
+2. **α:** przy α = 0.5 N1 jest istotnie wolniejsze, bo słaby ślad częściej przegrywa z losowym ruchem. Przy α = 2 i 4 różnica nie jest istotna, bo już przy α = 1 ślad o sile 1 dostaje 94% wagi (punkt 4).
+3. **ε:** żadna różnica nie jest istotna. ε działa tylko na komórkach ze śladem (punkt 5), a ślad i tak zanika, gdy skupisko się wyczerpie.
+
+**Zastrzeżenie:** ρ zmienia też to, jak długo ślad przeżywa drogę. Przy ρ = 0.05 ślad o sile 5 spada do τ₀ po około 121 krokach, a najdalsza komórka Miasteczka jest 80 kroków od bazy, więc ślad do dalekiego skupiska może zniknąć, zanim ktoś za nim pójdzie.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep evaporation_rate 0.005 0.01 0.02 0.05`, tak samo `--sweep pheromone_alpha 0.5 1 2 4` i `--sweep exploration_rate 0 0.05 0.1 0.3`, po 360 przebiegów, raport `python -m kaucjowicze.plots --input results/campus_rho` (i `_alpha`, `_eps`). Średnia ± 95%.
+
+**Kontrola:** przebiegi przy wartościach domyślnych są identyczne z punktem 14 (wspólne kolumny `runs.csv`, `timeline.csv`, `agents.csv`), a przebiegi losowego spaceru i N2 są identyczne przy każdej wartości ρ, α i ε, więc te parametry naprawdę zmieniają tylko N1. Losowy spacer ma zawsze t₉₀ 7257 ± 1588.
+
+| Parametr | Wartość | t₉₀ ACO N1 | Gini ACO N1 | t₉₀ / t₉₀ przy wartości domyślnej | p (N1 / N1 domyślne) | t₉₀ losowy / t₉₀ ACO N1 |
+|---|---|---|---|---|---|---|
+| ρ | 0.005 | 2901 ± 733 | 0.530 ± 0.031 | 1.19 | 0.28 | 2.50 |
+| ρ | 0.01 | 2533 ± 857 | 0.514 ± 0.030 | 1.04 | 0.75 | 2.87 |
+| ρ | **0.02** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| ρ | 0.05 | 2590 ± 1054 | 0.488 ± 0.026 | 1.06 | 0.30 | 2.80 |
+| α | 0.5 | 2595 ± 1005 | 0.477 ± 0.031 | 1.06 | 0.82 | 2.80 |
+| α | **1** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| α | 2 | 2448 ± 842 | 0.525 ± 0.031 | 1.00 | 0.72 | 2.96 |
+| α | 4 | 2137 ± 421 | 0.511 ± 0.032 | 0.88 | 0.66 | 3.40 |
+| ε | 0 | 1899 ± 472 | 0.524 ± 0.031 | 0.78 | 0.073 | 3.82 |
+| ε | 0.05 | 2305 ± 534 | 0.536 ± 0.039 | 0.94 | 0.56 | 3.15 |
+| ε | **0.1** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| ε | 0.3 | 1885 ± 483 | 0.470 ± 0.029 | 0.77 | 0.13 | 3.85 |
+
+Pogrubienie oznacza wartość domyślną. Test Wilcoxona dla par, 30 par w każdym teście. Po korekcie (próg 0.0167) żaden wynik nie jest istotny.
+
+**Wnioski:**
+
+- **Hipoteza 1 (ρ) potwierdza się tylko częściowo.** N1 jest średnio najszybsze przy wartości domyślnej, ale różnica przy ρ = 0.005 nie jest istotna (o 19% wolniej, p = 0.28), a przewidywaliśmy, że będzie. Przy ρ = 0.01 i 0.05 różnicy nie ma, zgodnie z hipotezą.
+- **Hipoteza 2 (α) potwierdza się tylko częściowo.** Przy α = 0.5 N1 nie jest istotnie wolniejsze (p = 0.82), choć tego się spodziewaliśmy. Przy α = 2 i 4 różnicy nie ma, zgodnie z hipotezą.
+- **Hipoteza 3 (ε) się potwierdza:** żadna różnica nie jest istotna. Średnie przy ε = 0 i ε = 0.3 są o około 22% niższe niż przy 0.1, ale z dwóch stron wartości domyślnej i bez korekty p = 0.073 i 0.13, więc to raczej szum niż kierunek.
+- **Ogólnie: N1 jest mało wrażliwe na parametry śladu w badanych zakresach.** Średnie t₉₀ mieszczą się w 1885–2901, a przedziały ufności wszystkich wartości się nakładają. Wartości domyślne z `MILESTONES.md` są więc rozsądne także na Miasteczku, chociaż ich tam nie stroiliśmy. Przewaga nad losowym spacerem wynosi 2.5–3.9 przy każdej wartości.
+- **Nie znaczy to, że parametry nie mają znaczenia,** tylko że przy 30 ziarnach i rozrzucie t₉₀ N1 (przedział ± 400–1000 kroków) nie wykrywamy różnic mniejszych niż około 20–30%.
