@@ -19,7 +19,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 from scipy import stats
 
-from kaucjowicze.config import LAYOUTS
+from kaucjowicze.config import LAYOUTS, SimulationConfig
 from kaucjowicze.experiments import SWEEPS
 
 CONFIDENCE = 0.95
@@ -59,6 +59,8 @@ SWEEP_TITLES = {
 }
 # P5 was planned with the unpaired test of P1 and P2; the later sweeps, like P6, pair by seed
 UNPAIRED_SWEEPS = ("n_agents",)
+# Trail parameters change only ACO N1, so P9 tests N1 against itself at the default value
+TRAIL_SWEEPS = ("evaporation_rate", "pheromone_alpha", "exploration_rate")
 # P6 tests the same pair, t_90 and Gini once per layout, paired by seed (decided before it ran)
 P6_METRICS = ("t_90", "gini")
 # Runs written without `--layout` have the counts of their map and scenario
@@ -396,6 +398,44 @@ def sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
             pairs = len(paired)
         rows.append({"value": value, "pairs": pairs, "p_value": p_value})
     table = pd.DataFrame(rows, columns=["value", "pairs", "p_value"])
+    table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
+    table["significant"] = table["p_value"] < table["threshold"]
+    return table
+
+
+def default_value(parameter: str) -> int | float:
+    return _plain(getattr(SimulationConfig(), parameter))
+
+
+def trail_sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
+    """Two-sided Wilcoxon signed-rank tests of t_90, ACO N1 at each other value of a trail
+    parameter vs ACO N1 at its default, paired by seed, with the Bonferroni threshold over them.
+    """
+    parameter = sweep_parameter(runs)
+    runs = with_sweep_value(runs)
+    aco = runs[runs["variant"] == ACO_SHARED]
+    default = default_value(parameter)
+    at_default = censored(aco[aco["value"] == default], "t_90").set_axis(
+        aco.loc[aco["value"] == default, "seed"]
+    )
+    rows = []
+    if not at_default.empty:
+        for value in _sweep_values(aco, "value"):
+            if value == default:
+                continue
+            same = aco[aco["value"] == value]
+            values = censored(same, "t_90").set_axis(same["seed"])
+            paired = pd.concat({"value": values, "default": at_default}, axis=1, join="inner")
+            p_value = _wilcoxon_p(paired["value"], paired["default"])
+            rows.append(
+                {
+                    "value": value,
+                    "pairs": len(paired),
+                    "t_90_ratio": paired["value"].mean() / paired["default"].mean(),
+                    "p_value": p_value,
+                }
+            )
+    table = pd.DataFrame(rows, columns=["value", "pairs", "t_90_ratio", "p_value"])
     table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
     table["significant"] = table["p_value"] < table["threshold"]
     return table
@@ -767,6 +807,8 @@ def format_sweep_summary(runs: pd.DataFrame) -> str:
             for row in aco_advantage(runs).itertuples()
         ),
     )
+    if parameter in TRAIL_SWEEPS:
+        return _format_trail_sweep(runs, f"# {name} ({comparison})", symbol, table, advantage)
     tests = sweep_significance(runs)
     paired = parameter not in UNPAIRED_SWEEPS
     significance = _markdown_table(
@@ -799,6 +841,48 @@ def format_sweep_summary(runs: pd.DataFrame) -> str:
         "## Significance\n\n"
         f"{test}, {variant_a} vs {variant_b}, one test per {symbol}, "
         "Bonferroni correction over those tests.\n\n"
+        f"{significance}\n"
+    )
+
+
+def _format_trail_sweep(
+    runs: pd.DataFrame, heading: str, symbol: str, table: str, advantage: str
+) -> str:
+    default = default_value(sweep_parameter(runs))
+    significance = _markdown_table(
+        (
+            symbol,
+            "Pairs",
+            f"t_90 / t_90 at {symbol} = {default}",
+            "p-value",
+            "Bonferroni threshold",
+            "Significant",
+        ),
+        (
+            (
+                row.value,
+                row.pairs,
+                f"{row.t_90_ratio:.2f}",
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
+            )
+            for row in trail_sweep_significance(runs).itertuples()
+        ),
+    )
+    return (
+        f"{heading}\n\n"
+        f"Map: {map_label(runs)}. Scenario: {scenario_label(runs)}.\n\n"
+        "Mean ± 95% confidence interval. A run below 90% counts as the step limit T. "
+        f"{symbol} changes only {ACO_SHARED}; the other variants are a fixed reference.\n\n"
+        f"{table}\n\n"
+        "## Advantage of ACO N1\n\n"
+        "Ratio of the mean t_90 values over the seeds both variants ran on.\n\n"
+        f"{advantage}\n\n"
+        "## Significance\n\n"
+        f"Two-sided Wilcoxon signed-rank test of t_90 paired by seed, {ACO_SHARED} at each "
+        f"{symbol} vs {ACO_SHARED} at the default {symbol} = {default}, Bonferroni correction "
+        "over those tests.\n\n"
         f"{significance}\n"
     )
 

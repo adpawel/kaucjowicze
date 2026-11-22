@@ -24,6 +24,7 @@ from kaucjowicze.plots import (  # noqa: E402
     combine_results,
     curve_band,
     format_summary,
+    format_sweep_summary,
     has_layout_sweep,
     has_sweep,
     layout_order,
@@ -39,6 +40,7 @@ from kaucjowicze.plots import (  # noqa: E402
     sweep_parameter,
     sweep_significance,
     sweep_table,
+    trail_sweep_significance,
     write_report,
 )
 
@@ -687,3 +689,25 @@ def test_trail_parameter_sweep_keeps_fractions(tmp_path):
     assert "p9_eps_t90_vs_eps.png" in names
     assert sweep_table(results.runs)["value"].tolist()[::3] == [0.0, 0.3]
     assert "| 0.3 | " in report_text(results)
+
+
+def test_trail_parameter_is_tested_against_aco_at_its_default():
+    rows = []
+    for rho, shift in ((0.005, 30.0), (0.02, 0.0), (0.05, 0.0)):
+        for s in range(8):
+            rows.append({"variant": "aco/shared", "seed": s, "t_90": 20.0 + s + shift})
+            rows[-1]["sweep_value"] = rho
+            rows.append({"variant": "random", "seed": s, "t_90": 90.0, "sweep_value": rho})
+    runs = _sweep([{**row, "n_agents": 3, "sweep": "evaporation_rate"} for row in rows])
+
+    tests = trail_sweep_significance(runs)
+
+    assert tests["value"].tolist() == [0.005, 0.05]  # the default is the reference, not a test
+    assert tests["pairs"].tolist() == [8, 8]
+    assert tests["t_90_ratio"].tolist() == pytest.approx([(23.5 + 30) / 23.5, 1.0])
+    assert tests["p_value"].tolist() == pytest.approx([2 / 2**8, 1.0])
+    assert (tests["threshold"] == 0.025).all()
+    assert tests["significant"].tolist() == [True, False]
+    summary = format_sweep_summary(runs)
+    assert summary.startswith("# Evaporation rate (P9)")
+    assert "at the default rho = 0.02" in summary
