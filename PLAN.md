@@ -96,27 +96,30 @@ Porównujemy trzy podejścia do oceny jakości algorytmu:
 
 ## 6. Zakres prac i etapy
 
+Stan na 22 listopada 2026. Szczegóły zmian od zajęć 2 opisuje [`ZMIANY_ZAJECIA3.md`](ZMIANY_ZAJECIA3.md).
+
 ### Etap 1: Inicjalizacja
-- [ ] Siatka z akademikami jako przeszkodami (mapa MS AGH)
-- [ ] Generator puszek w klastrach (scenariusz statyczny)
-- [ ] Agenci z losowym ruchem, workiem k i powrotem do bazy (baseline)
-- [ ] Podstawowa wizualizacja
+- [x] Siatka z akademikami jako przeszkodami (mapa MS AGH, `ALGORITHM.md` §13)
+- [x] Generator puszek w klastrach (scenariusz statyczny)
+- [x] Agenci z losowym ruchem, workiem k i powrotem do bazy (baseline)
+- [x] Podstawowa wizualizacja
 
 ### Etap 2: Wdrożenie ACO
-- [ ] Pole feromonowe (NumPy)
-- [ ] Powrót do bazy najkrótszą drogą i zostawianie śladu
-- [ ] Wybór kierunku na podstawie feromonu (α, β, ε)
+- [x] Pole feromonowe (NumPy)
+- [x] Powrót do bazy najkrótszą drogą i zostawianie śladu
+- [x] Wybór kierunku na podstawie feromonu (α, ε; bez η i β, zob. `ALGORITHM.md` §4)
 
 ### Etap 3: Optymalizacja i dane
-- [ ] Parowanie (i dyfuzja) śladów
-- [ ] Balans eksploracji i eksploatacji
-- [ ] Zapis wyników do CSV
-- [ ] Metryki wariantów A i B, potem C
-- [ ] Scenariusz dynamiczny
+- [x] Parowanie śladów (dyfuzji nie wdrożyliśmy)
+- [ ] Balans eksploracji i eksploatacji (ε jest w kodzie, analiza wrażliwości na ρ, α i ε nie jest zaczęta)
+- [x] Zapis wyników do CSV
+- [x] Metryki wariantów A i B
+- [ ] Metryka wariantu C (`J`): kolumna jest pusta, propozycja w [`NAGRODY.md`](NAGRODY.md)
+- [x] Scenariusz dynamiczny (porównanie P4, `ALGORITHM.md` §15)
 
 ### Etap 4: Finalizacja i raport
-- [ ] Demo symulacji
-- [ ] Skrypty generujące wykresy z CSV
+- [x] Demo symulacji (okno Pygame, `--gui`)
+- [x] Skrypty generujące wykresy z CSV (`kaucjowicze.plots`)
 - [ ] Sprawozdanie
 
 **Cel końcowy:** wykazać na wykresach, że zbieranie z ACO jest szybsze niż losowy spacer.
@@ -124,7 +127,9 @@ Porównujemy trzy podejścia do oceny jakości algorytmu:
 ## 7. Format danych (CSV)
 
 **Plik przebiegów (`runs.csv`):** jeden wiersz na przebieg
-`run_id, seed, algorithm (aco/random), scenario, n_agents, k, rho, alpha, beta, eps, t_50, t_90, t_100, cans_at_T, total_path_length, trips, gini, J`
+`run_id, seed, algorithm (aco/random), reward, scenario, map, n_agents, k, rho, alpha, beta, eps, max_steps, initial_cans, steps, t_50, t_90, t_100, cans_at_T, total_path_length, path_per_can, trips, gini, cans_min, cans_max, J, total_cans, layout`
+
+Kolumny spoza pierwotnego planu i kolumny, które zostają puste (`beta`, `J`), opisuje `ALGORITHM.md` §11. `layout` jest pusta, gdy przebieg nie używa nazwanego układu puszek (§17).
 
 **Plik szeregu czasowego (`timeline.csv`):** jeden wiersz na krok czasu
 `run_id, step, cans_collected, cans_on_map, agents_searching, agents_carrying`
@@ -142,8 +147,8 @@ W `runs.csv` kolumna `total_cans` to puszki z całego przebiegu (startowe i z im
 | Narzędzie | Zastosowanie |
 |---|---|
 | Python + NumPy | symulacja agentów i pola feromonowego na siatce |
-| Wizualizacja | narzędzie wybierzemy po porównaniu (np. Pygame), z mapą MS AGH jako tłem |
-| CSV + pandas (+ matplotlib) | zapis przebiegów i wykresy do sprawozdania |
+| Pygame | okno wizualizacji z ortofotomapą MS AGH albo zwykłą mapą jako tłem (opcjonalna zależność `[gui]`) |
+| CSV + pandas, matplotlib, SciPy | zapis przebiegów, wykresy i testy statystyczne do sprawozdania (opcjonalna zależność `[analysis]`) |
 | Git i GitHub | wersjonowanie kodu, skryptów i raportu |
 
 **Sprzęt:** wystarczą zwykłe laptopy, bez karty graficznej i dodatkowego sprzętu. Całość piszemy w jednym języku.
@@ -159,11 +164,13 @@ Po polsku zostają tylko dokumenty projektowe (ten plan) i sprawozdanie.
 
 ## 9. Otwarte kwestie
 
-- Skala siatki i sposób przeniesienia mapy MS AGH (rozdzielczość, które budynki uwzględnić)
-- Liczba i rozmieszczenie punktów skupu
-- Liczba agentów i domyślne wartości parametrów (k, ρ, α, β, ε, T)
-- Definicja „braku puszek w okolicy” (promień widzenia agenta)
-- Wagi w1, w2 w wariancie C
+Kwestie rozstrzygnięte mają odnośnik do miejsca, w którym zapisano decyzję.
+
+- ~~Skala siatki i sposób przeniesienia mapy MS AGH (rozdzielczość, które budynki uwzględnić)~~: komórka 3 m, mapa 100 × 91 z OpenStreetMap (`ALGORITHM.md` §13)
+- ~~Liczba i rozmieszczenie punktów skupu~~: jeden punkt w środku mapy, położenie umowne (`MILESTONES.md` 1, `ALGORITHM.md` §13). Porównanie kilku punktów skupu nie jest zaczęte (`MILESTONES.md`, Część II)
+- ~~Liczba agentów i domyślne wartości parametrów (k, ρ, α, β, ε, T)~~: `MILESTONES.md` 1 i tabela oznaczeń w `ALGORITHM.md`. Bez β (§4), T = 20000 na Miasteczku (§13). Wpływ liczby agentów: porównanie P5 (§16)
+- ~~Definicja „braku puszek w okolicy” (promień widzenia agenta)~~: r = 2 oraz powrót po S = 50 krokach bez nowej puszki (`MILESTONES.md` 1)
+- Wagi w1, w2 w wariancie C: nadal otwarte, propozycja w [`NAGRODY.md`](NAGRODY.md)
 - Podział zadań w zespole
 
 ## 10. Literatura

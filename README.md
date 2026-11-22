@@ -85,12 +85,36 @@ ruff format --check .
 
 CI runs the same checks on every pull request and push to `master`.
 
+## Code structure
+
+| Module (`src/kaucjowicze/`) | Role |
+|---|---|
+| `config.py` | `SimulationConfig` with all parameters, map, scenario and layout defaults (`MAP_DEFAULTS`, `SCENARIO_DEFAULTS`, `LAYOUTS`) |
+| `grid.py`, `maps.py` | the grid with obstacles, bases and cans; the test map and the campus mask loader |
+| `cans.py` | can clusters and background cans, the party schedule of the dynamic scenario |
+| `pathfinding.py` | distance maps (breadth-first search) and local search for visible cans |
+| `agent.py` | agent state and counters, without behaviour |
+| `policies.py` | how a searching agent that sees no can moves: random walk, ACO, private memory (N2) |
+| `simulation.py` | the headless loop: searching, picking up, returning, trail and evaporation, parties |
+| `rewards.py` | rewards N1 and N2, computed after a run |
+| `factory.py` | builds a ready-to-run simulation of a variant for a seed |
+| `metrics.py` | per-run metrics; they only read the simulation |
+| `experiments.py`, `plots.py` | running variants on shared seeds into CSV files, and figures with `summary.md` |
+| `view.py`, `gui.py` | what the window shows (no pygame) and the Pygame window |
+| `__main__.py` | the `python -m kaucjowicze` command line |
+
+`tools/build_campus_map.py` builds the campus mask from OpenStreetMap data. The simulation does not depend on the window, so experiments and tests run headless.
+
 ## Documentation
+
+Project documents are in Polish.
 
 - [`PLAN.md`](PLAN.md): project plan
 - [`MILESTONES.md`](MILESTONES.md): assumptions and milestones
 - [`ALGORITHM.md`](ALGORITHM.md): formulas, decisions and results
 - [`NAGRODY.md`](NAGRODY.md): open problems with rewards and proposed trail variants
+- [`ZMIANY_ZAJECIA3.md`](ZMIANY_ZAJECIA3.md): changes since the second class (comparisons P3–P11)
+- [`docs/`](docs): class documents: the initial project description (`aiin_wstepny_opis.pdf`), the documentation and slides of the second class, and the documentation and slides of the third class (`aiin_dokumentacja_zajecia3.docx`, `aiin_prezentacja_zajecia3.pptx`)
 - [`docs/aiin_dokumentacja_semifinal.docx`](docs/aiin_dokumentacja_semifinal.docx): first final documentation (P1–P9, without P10, P11 and the crowd check)
 - [`docs/aiin_prezentacja_semifinal.pptx`](docs/aiin_prezentacja_semifinal.pptx): first final presentation, 15 slides without P10 and P11
 - [`docs/aiin_dokumentacja_final.docx`](docs/aiin_dokumentacja_final.docx): final documentation for the lecturer (P1–P11)
