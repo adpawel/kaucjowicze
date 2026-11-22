@@ -630,3 +630,93 @@ Spadki stosunków między wartościami opisujemy tylko opisowo, bez testu trendu
 - **Cenzurowanie przy T.** Gdy losowy spacer często nie osiąga 90% (np. przy r = 1 albo k = 2), jego t₉₀ liczymy jako T, więc przewaga ACO jest wtedy zaniżona, jak przy N = 5 w punkcie 16. Podajemy liczbę przebiegów, które osiągnęły 90%.
 
 **Kod:** `--sweep PARAMETR WARTOŚCI` w `experiments.py` uogólnia `--n-agents` z punktu 16 (`--n-agents 5 10` to to samo co `--sweep n_agents 5 10`). Zmienia jeden parametr z `SWEEPS`: `n_agents`, `bag_capacity`, `vision_radius`, `evaporation_rate`, `pheromone_alpha` albo `exploration_rate`. Każdy przegląd trafia do własnego katalogu, `results/<mapa>_bag`, `results/<mapa>_vision` itd., także gdy zawiera wartość domyślną. `runs.csv` ma trzy nowe kolumny: `r` (promień widzenia), `sweep` (nazwa zmienianego parametru, pusta poza przeglądem) i `sweep_value` (jego wartość w przebiegu). Druga i trzecia są potrzebne, bo `rho`, `alpha` i `eps` wypełniamy tylko dla N1 (punkt 11), więc bez nich losowego spaceru i N2 nie dałoby się przypisać do wartości parametru. Raport w `plots.py` działa dla dowolnego parametru: tabela t₉₀ i Giniego, przewaga ACO i testy. Nakład `N · t₉₀` pokazuje tylko dla liczby agentów, bo dla pozostałych parametrów nie ma sensu, a zamiast wykresu nakładu rysuje Giniego. Pliki starszego pomiaru P5, bez nowych kolumn, raport nadal rozpoznaje po kilku wartościach `n_agents`.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep bag_capacity 2 5 10 20 40` (450 przebiegów) i `--sweep vision_radius 1 2 4 8` (360 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_bag` i `--input results/campus_vision`. Średnia ± 95%. Przebieg poniżej 90% liczy się jako T.
+
+**Kontrola:** przebiegi przy k = 10 i przy r = 2 mają te same wartości we wszystkich wspólnych kolumnach `runs.csv` co pomiar z punktu 14, a ich `timeline.csv` i `agents.csv` są identyczne.
+
+#### Pojemność worka k (P7)
+
+| k | Wariant | t₉₀ | Gini | Osiągnęło 90% | Kursy | Puszki na kurs |
+|---|---|---|---|---|---|---|
+| 2 | losowy spacer | 18498 ± 1350 | 0.229 ± 0.017 | 6/30 | 110 | 2.0 |
+| 2 | ACO N1 | 2964 ± 601 | 0.363 ± 0.030 | 30/30 | 138 | 2.0 |
+| 2 | N2 | 4166 ± 977 | 0.562 ± 0.028 | 30/30 | 138 | 2.0 |
+| 5 | losowy spacer | 13273 ± 2017 | 0.328 ± 0.022 | 23/30 | 53 | 4.7 |
+| 5 | ACO N1 | 2299 ± 582 | 0.468 ± 0.031 | 30/30 | 58 | 4.6 |
+| 5 | N2 | 2685 ± 620 | 0.648 ± 0.028 | 30/30 | 58 | 4.6 |
+| 10 | losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | 29/30 | 33 | 8.3 |
+| 10 | ACO N1 | 2439 ± 559 | 0.516 ± 0.027 | 30/30 | 34 | 8.1 |
+| 10 | N2 | 2360 ± 471 | 0.689 ± 0.027 | 30/30 | 33 | 8.2 |
+| 20 | losowy spacer | 4762 ± 1121 | 0.543 ± 0.029 | 30/30 | 22 | 12.7 |
+| 20 | ACO N1 | 1776 ± 549 | 0.596 ± 0.025 | 30/30 | 23 | 12.3 |
+| 20 | N2 | 2144 ± 504 | 0.714 ± 0.024 | 30/30 | 21 | 13.2 |
+| 40 | losowy spacer | 2459 ± 554 | 0.667 ± 0.023 | 30/30 | 16 | 17.5 |
+| 40 | ACO N1 | 1993 ± 566 | 0.678 ± 0.024 | 30/30 | 17 | 16.7 |
+| 40 | N2 | 2354 ± 705 | 0.734 ± 0.021 | 30/30 | 16 | 18.0 |
+
+Kursy i puszki na kurs to średnie z przebiegów (opisowo, z `trips` i `cans_at_T`).
+
+| k | t₉₀ losowy / t₉₀ ACO N1 | N1 szybsze na | p (t₉₀, N1 / losowy) | Istotne po korekcie (próg 0.01) |
+|---|---|---|---|---|
+| 2 | 6.24 | 30/30 | 1.9 · 10⁻⁹ | tak |
+| 5 | 5.77 | 29/30 | 3.7 · 10⁻⁹ | tak |
+| 10 | 2.98 | 28/30 | 1.3 · 10⁻⁸ | tak |
+| 20 | 2.68 | 25/30 | 1.8 · 10⁻⁵ | tak |
+| 40 | 1.23 | 19/30 | 0.18 | nie |
+
+Test Wilcoxona dla par, we wszystkich testach 30 par.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się tylko dla losowego spaceru.** Jego t₉₀ spada z k monotonicznie i bardzo mocno, od 18498 przy k = 2 do 2459 przy k = 40. ACO N1 i N2 zyskują tylko między k = 2 a k = 5–10, a dalej ich t₉₀ jest prawie stałe (N1: 1776–2439, N2: 2144–2360, przedziały się nakładają). Wariant, który pamięta drogę do skupiska, mało traci na częstych powrotach, a losowy spacer płaci za każdy powrót ponownym szukaniem.
+- **Hipoteza 2 potwierdza się częściowo.** Przewaga ACO maleje z k monotonicznie: 6.2, 5.8, 3.0, 2.7, 1.2. Jest istotna po korekcie przy k od 2 do 20, ale **przy k = 40 już nie** (p = 0.18, N1 szybsze tylko na 19 z 30 map). Przewidywaliśmy istotność przy każdym k, więc ta część hipotezy się nie potwierdziła.
+- **Odpowiedź na pytanie z `MILESTONES.md`: ślad pomaga tym mniej, im rzadziej agent wraca do bazy.** Przy k = 40 kurs kończy się średnio po 17 puszkach, prawie zawsze przez cierpliwość S, a nie pełny worek. Agent zbiera więc tyle, ile znajdzie w okolicy, a skupisko opróżnia jeden lub dwóch agentów. Kursów jest o połowę mniej niż przy k = 10, więc i ślad powstaje o połowę rzadziej.
+- **Przy k = 2 przewaga ACO jest zaniżona:** losowy spacer osiągnął 90% tylko w 6 z 30 przebiegów, a resztę liczymy jako T, jak przy N = 5 w punkcie 16.
+- **Gini rośnie z k we wszystkich wariantach** (N1: od 0.363 do 0.678). Przy dużym worku kto znajdzie skupisko, ten zabiera dużą jego część. N2 dzieli najmniej równo przy każdym k, ale różnica do N1 maleje z k. Opisowo, bez testu.
+- **N1 i N2 są równie szybkie przy k ≥ 5** (przedziały się nakładają), tak jak w punkcie 14. Przy k = 2 N1 jest średnio szybsze (2964 wobec 4166), ale tej pary nie testowaliśmy.
+
+#### Promień widzenia r (P8)
+
+| r | Wariant | t₉₀ | Gini | Osiągnęło 90% |
+|---|---|---|---|---|
+| 1 | losowy spacer | 7727 ± 1766 | 0.425 ± 0.025 | 29/30 |
+| 1 | ACO N1 | 2287 ± 775 | 0.484 ± 0.024 | 30/30 |
+| 1 | N2 | 3147 ± 629 | 0.667 ± 0.027 | 30/30 |
+| 2 | losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | 29/30 |
+| 2 | ACO N1 | 2439 ± 559 | 0.516 ± 0.027 | 30/30 |
+| 2 | N2 | 2360 ± 471 | 0.689 ± 0.027 | 30/30 |
+| 4 | losowy spacer | 5146 ± 831 | 0.401 ± 0.027 | 30/30 |
+| 4 | ACO N1 | 1726 ± 660 | 0.487 ± 0.033 | 30/30 |
+| 4 | N2 | 2027 ± 485 | 0.693 ± 0.024 | 30/30 |
+| 8 | losowy spacer | 4360 ± 1188 | 0.389 ± 0.023 | 30/30 |
+| 8 | ACO N1 | 1537 ± 528 | 0.451 ± 0.033 | 30/30 |
+| 8 | N2 | 1425 ± 497 | 0.603 ± 0.034 | 30/30 |
+
+| r | t₉₀ losowy / t₉₀ ACO N1 | N1 szybsze na | p (t₉₀, N1 / losowy) | Istotne po korekcie (próg 0.0125) |
+|---|---|---|---|---|
+| 1 | 3.38 | 29/30 | 8.0 · 10⁻⁸ | tak |
+| 2 | 2.98 | 28/30 | 1.3 · 10⁻⁸ | tak |
+| 4 | 2.98 | 27/30 | 4.4 · 10⁻⁶ | tak |
+| 8 | 2.84 | 27/30 | 2.8 · 10⁻⁶ | tak |
+
+Test Wilcoxona dla par, we wszystkich testach 30 par.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się dla losowego spaceru i N2,** których t₉₀ maleje z r (losowy spacer: 7727 → 4360, N2: 3147 → 1425). W ACO N1 t₉₀ przy r = 1 jest średnio niższe niż przy r = 2 (2287 wobec 2439), ale przedziały się nakładają, więc spadek z r jest tylko ogólną tendencją (2287–2439 przy r ≤ 2, 1537 przy r = 8).
+- **Hipoteza 2 potwierdza się formalnie, ale efekt jest mały.** Stosunek jest największy przy r = 1 (3.38) i najmniejszy przy r = 8 (2.84), a ACO N1 jest istotnie szybsze przy każdym r. Przewaga prawie nie zależy jednak od promienia: między r = 2 a r = 8 zmienia się z 2.98 na 2.84.
+- **Odpowiedź na pytanie z `MILESTONES.md`: feromon pomaga prawie tak samo, gdy agenci widzą daleko.** Lepszy wzrok przyspiesza wszystkie warianty mniej więcej w tej samej proporcji. Prawdopodobnie dlatego, że przy większym r ślad też jest mocniejszy (n liczymy w większym oknie), ale tego nie rozdzielaliśmy (zastrzeżenie wyżej).
+- **N1 i N2 są równie szybkie przy r ≥ 2.** Przy r = 1 N1 jest średnio szybsze (2287 wobec 3147), co pasuje do tego, że pamięć N2 ocenia źródło po bardzo małym oknie. Tej pary nie testowaliśmy.
+- **Gini prawie nie zależy od r** (N1: 0.451–0.516), a N2 dzieli najmniej równo przy każdym r.
+
+#### Co zależy od k i r
+
+| Wniosek z punktu 14 | k (P7) | r (P8) |
+|---|---|---|
+| ACO N1 jest istotnie szybsze od losowego spaceru | **zależy:** tak przy k ≤ 20, nie przy k = 40 | nie zależy: tak przy każdym r |
+| Przewaga około 3 razy | **zależy:** od 6.2 przy k = 2 do 1.2 przy k = 40 | prawie nie zależy: 2.8–3.4 |
+| N1 i N2 są równie szybkie | przy k ≥ 5 tak, przy k = 2 N1 średnio szybsze (bez testu) | przy r ≥ 2 tak, przy r = 1 N1 średnio szybsze (bez testu) |
+| N2 dzieli puszki najmniej równo | kierunek utrzymuje się przy każdym k (opisowo) | kierunek utrzymuje się przy każdym r (opisowo) |
