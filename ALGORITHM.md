@@ -891,3 +891,44 @@ Pogrubienie oznacza najwyższe średnie J przy danej wadze. Przedziały J mają 
 - **Prawdopodobne wyjaśnienie (niesprawdzone):** sygnały zmieniają tylko względną siłę śladów, a przy α = 1 i τ₀ = 0.01 ślad o sile powyżej około 1 i tak dostaje ponad 94% wagi (punkt 4). W `equal±` waga w_i odchyla ślad co najwyżej kilkukrotnie, a w `speed` wybór między źródłami zależy od b / L, które różni się między kursami mniej niż n. Kolejność wyboru kierunku się więc prawie nie zmienia.
 - **J jawnie zależy od wag.** Przy w₁ ≤ 0.25 (liczy się głównie równość) najwyższe J ma losowy spacer, a przy w₁ ≥ 0.5 warianty ACO. N2 ma najniższe J przy każdej wadze poniżej 1 i dopiero przy w₁ = 1 dogania N1. Między wariantami ACO J różni się o mniej niż 0.01, czyli w granicach szumu, więc **„najlepszy” wariant ACO zależy od przypadku, a nie od celu.**
 - **Odpowiedź na pytanie z `NAGRODY.md`:** wprowadzenie celu przez ilość śladu nie wystarcza, żeby nagroda sterowała kolonią w tym modelu. Nagroda działa realnie dopiero na poziomie reguł (ślad kontra pamięć prywatna w N2), a nie siły śladu. Ten wniosek dotyczy badanych sygnałów i wartości domyślnych α, τ₀, q.
+
+## 21. Populacja mieszana (P10)
+
+**Pytanie z `MILESTONES.md` (Część II):** czy egoiści, którzy korzystają z cudzych śladów, zarabiają więcej kosztem grupy, i od jakiego odsetka egoistów współpraca się załamuje. To ostatni kierunek ze slajdu 8 prezentacji z zajęć 2 obok MAX–MIN (punkt 22). Odpowiada też na ograniczenie z tego slajdu, że N1 i N2 nigdy nie działają razem, więc P2 porównuje dwie osobne kolonie.
+
+### Model
+
+W kolonii ACO N1 część agentów to **egoiści** (`egoist_share`, `MixedPolicy`):
+
+| Zachowanie | Współpracujący | Egoista |
+|---|---|---|
+| zostawia ślad | tak, jak w N1 | **nie** |
+| pamięć prywatna | nie korzysta | pamięta najlepsze źródło i wraca do niego, jak w N2 |
+| gdy nic nie pamięta | idzie za śladem, jak w N1 | **idzie za cudzym śladem**, zamiast błądzić jak w N2 |
+| unikanie tłoku | tak (λ = 0) | nie, jak w N2 |
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Egoistami są pierwsze ⌊e · N + 0.5⌋ agentów | Wszyscy startują z tej samej bazy, więc numer nie ma znaczenia. Przy N = 20 udziały 0.25, 0.5 i 0.75 dają dokładnie 5, 10 i 15 egoistów |
+| Zarobek to puszki oddane przez agenta | Dosłownie nagroda N2. Dla współpracujących średnia ich puszek to zarazem ich nagroda N1, gdyby dzielili pulę między siebie |
+| Udział zmienia tylko wariant ACO N1 | Losowy spacer i N2 są stałym odniesieniem, jak przy ρ, α i ε (punkt 19) |
+| **Kontrola:** e = 0 to dokładnie N1, a e = 1 to dokładnie N2 | Bez współpracujących nie ma śladu, więc egoista bez pamięci błądzi jak w N2, z tym samym losowaniem. Sprawdzają to testy `test_no_egoists_is_n1` i `test_only_egoists_is_n2`, a w pomiarze porównanie z punktem 14 |
+
+`agents.csv` ma nową kolumnę `egoist` (0 lub 1), a `runs.csv` kolumnę `egoists` (liczba egoistów, tylko dla N1). Przegląd robi `--sweep egoist_share`, do katalogu `results/<mapa>_mixed`.
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór |
+|---|---|
+| Udział egoistów e | 0, 0.25, 0.5, 0.75, 1 |
+| Pozostałe | Miasteczko, scenariusz statyczny, wartości domyślne, N = 20, ziarna 200–229, T = 20000 |
+| Testy zarobku | w każdym przebiegu z obydwoma rodzajami agentów (e = 0.25, 0.5, 0.75): średnie puszki egoisty / średnie puszki współpracującego, test Wilcoxona dla par (para to jeden przebieg), 3 testy |
+| Testy kolonii | t₉₀ przy każdym e > 0 / t₉₀ przy e = 0 (czyli N1), test Wilcoxona dla par (to samo ziarno), 4 testy |
+| Korekta | Bonferroni na wszystkie 7 testów (próg 0.05 / 7 ≈ 0.0071) |
+
+Agenci jednego przebiegu nie są niezależni, dlatego jednostką testu zarobku jest przebieg, a nie agent. Gini i pozostałe pary podajemy opisowo.
+
+**Hipotezy:**
+
+1. **Egoiści zarabiają istotnie więcej niż współpracujący przy każdym e = 0.25, 0.5, 0.75.** Korzystają ze śladów innych, a potem wracają do swojego najlepszego źródła i nie ustępują przed tłokiem.
+2. **t₉₀ kolonii nie zmienia się istotnie przy żadnym e.** W P2 N1 i N2 były równie szybkie (punkt 14), więc mieszanka nie powinna być wolniejsza od żadnego z nich. „Załamanie współpracy” spodziewamy się zobaczyć w podziale, a nie w tempie: Gini rośnie z e od wartości N1 (0.516) do wartości N2 (0.689), co podajemy opisowo.
