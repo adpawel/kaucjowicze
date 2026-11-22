@@ -957,3 +957,38 @@ Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --firs
 - **Hipoteza 2 potwierdza się:** tempo kolonii nie zmienia się istotnie przy żadnym udziale. **Współpraca nie załamuje się więc w tempie, tylko w podziale:** Gini rośnie z e monotonicznie od 0.516 do 0.689. Z punktu widzenia całej kolonii egoiści nie szkodzą, ale z punktu widzenia współpracujących się nie opłacają.
 - **Mieszanka jest średnio najszybsza przy e = 0.25** (1968 wobec 2439 w N1), ale bez istotnej różnicy (p = 0.15). Możliwe, że egoiści przyspieszają opróżnianie znanych skupisk, a współpracujący dalej je znakują, ale tego nie sprawdzaliśmy.
 - **To pierwsze porównanie, w którym nagroda naprawdę zmienia wynik w tej samej kolonii:** reguła wynikająca z nagrody indywidualnej daje agentowi wyraźną przewagę nad agentem z nagrodą wspólną. W P3 zmiana samej siły śladu niczego nie zmieniała (punkt 20).
+
+## 22. Ograniczenie śladu z MAX–MIN Ant System (P11)
+
+**Pytanie z `MILESTONES.md` (Część II):** czy ograniczenie śladu zapobiega zbyt szybkiemu skupieniu się kolonii na jednym skupisku. To drugi kierunek z ostatniej pozycji slajdu 8 prezentacji z zajęć 2.
+
+### Model
+
+W MAX–MIN Ant System (Stützle i Hoos) feromon na każdej komórce leży w przedziale [τ_min, τ_max]. U nas po parowaniu, raz na krok:
+
+```
+τ ← min(τ, τ_max)
+```
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Tylko górna granica τ_max (`pheromone_max`, domyślnie bez granicy) | Rolę τ_min pełni już τ₀: waga komórki to (τ + τ₀)^α, więc żaden kierunek nie ma wagi zero (punkt 4). Dolna granica τ_min ≥ τ₀ na całej mapie sprawiłaby, że próg z kroku 2 punktu 4 nigdy by nie zadziałał i agent bez śladu nie poruszałby się jak w losowym spacerze, czyli zmieniłaby eksplorację, a nie ślad |
+| Obcinamy po parowaniu, a nie przy zostawianiu | Tak jak w MMAS: granica dotyczy stanu feromonu, a nie pojedynczego śladu. Komórka, na której ślad zostawia kilku agentów naraz, też nie przekroczy τ_max |
+| Bez ponownej inicjalizacji śladu (restartów MMAS) | U nas nie ma iteracji z najlepszym rozwiązaniem. Ślad i tak znika przy wyczerpanym źródle (punkt 2) |
+
+Przy α = 1 i τ₀ = 0.01 jedna komórka ze śladem τ wśród 8 sąsiadów dostaje (τ + τ₀) / (τ + 8τ₀) wagi (punkt 4): przy τ_max = 0.1 najwyżej 61%, przy 0.5 około 87%, przy 2 około 96%. Ślad bez granicy osiąga na Miasteczku kilkadziesiąt jednostek.
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór |
+|---|---|
+| τ_max | 0.1, 0.5, 2, 10 i bez granicy (wartość domyślna) |
+| Pozostałe | jak w punktach 18–21: Miasteczko, scenariusz statyczny, wartości domyślne, ziarna 200–229, T = 20000, trzy warianty. τ_max zmienia tylko ACO N1 |
+| Testy | ACO N1 przy każdej granicy / ACO N1 bez granicy, t₉₀, test Wilcoxona dla par, Bonferroni na 4 testy (próg 0.0125), jak dla ρ, α i ε w punkcie 19 |
+| Opisowo | Gini oraz przewaga nad losowym spacerem |
+
+**Hipotezy:**
+
+1. **Przy τ_max = 2 i 10 różnica t₉₀ nie jest istotna,** bo taki ślad i tak dostaje ponad 96% wagi, a N1 jest mało wrażliwe na siłę śladu (punkty 19 i 20).
+2. **Przy τ_max = 0.1 N1 jest istotnie wolniejsze,** bo ślad tylko sugeruje kierunek i częściej przegrywa z losowym ruchem. Przy 0.5 różnicy nie przewidujemy.
+3. **Gini maleje przy niskiej granicy** (opisowo), bo kolonia słabiej skupia się na skupisku, które znalazła pierwsza.
