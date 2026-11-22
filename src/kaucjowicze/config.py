@@ -16,6 +16,7 @@ MAP_DEFAULTS = {
         "max_steps": 3000,
         "event_start": 250,
         "event_interval": 250,
+        "speed_deposit": 1.0,  # placeholder until calibrated (ALGORITHM.md, point 20)
     },
     CAMPUS_MAP: {
         "cans_per_cluster": 45,
@@ -24,6 +25,7 @@ MAP_DEFAULTS = {
         "max_steps": 20000,
         "event_start": 1000,
         "event_interval": 1000,
+        "speed_deposit": 1.0,  # placeholder until calibrated (ALGORITHM.md, point 20)
     },
 }
 # The dynamic scenario starts with half of the clusters and adds the rest as parties during a run,
@@ -41,6 +43,19 @@ LAYOUTS = {
     CURRENT_LAYOUT: {"n_clusters": 6, "cans_per_cluster": 45, "n_background_cans": 0},
     "many-small": {"n_clusters": 18, "cans_per_cluster": 15, "n_background_cans": 0},
     "uniform": {"n_clusters": 0, "cans_per_cluster": 0, "n_background_cans": 270},
+}
+
+# How much trail ACO N1 lays per cell (NAGRODY.md, 3): the objective it feeds into the colony.
+# `source` is N1 as it was; the named trails of comparison P3 set the signal and its weight
+SOURCE = "source"
+SPEED = "speed"
+EQUAL = "equal"
+TRAIL_SIGNALS = (SOURCE, SPEED, EQUAL)
+TRAILS = {
+    SOURCE: {"trail_signal": SOURCE},
+    SPEED: {"trail_signal": SPEED},
+    "equal+": {"trail_signal": EQUAL, "fairness_gamma": 1.0},
+    "equal-": {"trail_signal": EQUAL, "fairness_gamma": -1.0},
 }
 
 
@@ -89,6 +104,11 @@ class SimulationConfig:
     exploration_rate: float = 0.1  # epsilon: probability of a random move instead of following
     crowd_radius: int = 3  # half-width of the window an agent checks for a crowd ahead of a move
     crowd_penalty: float = 0.0  # trail ahead of a crowd counts this much; 1 turns avoidance off
+
+    # Trail signal (ACO N1): what sets the amount of trail, see `TRAILS` and `trail_amount`
+    trail_signal: str = SOURCE
+    speed_deposit: float | None = None  # q_s: `speed` trail per cell = q_s * bag / trip length
+    fairness_gamma: float = 1.0  # `equal` weighs the trail by (relative earnings) ** gamma
 
     # Time
     max_steps: int | None = None  # T: simulation limit
@@ -173,3 +193,17 @@ class SimulationConfig:
             raise ValueError("Crowd radius must not be negative")
         if not 0.0 <= self.crowd_penalty <= 1.0:
             raise ValueError("Crowd penalty must be in [0, 1]")
+        if self.trail_signal not in TRAIL_SIGNALS:
+            raise ValueError(f"Unknown trail signal: {self.trail_signal}")
+        if self.speed_deposit < 0:
+            raise ValueError("Speed deposit must not be negative")
+
+
+def trail_name(config: SimulationConfig) -> str:
+    """Name in `TRAILS` of the trail signal of `config`, or a description of an unnamed one."""
+    for name, settings in TRAILS.items():
+        if settings["trail_signal"] != config.trail_signal:
+            continue
+        if config.trail_signal != EQUAL or settings["fairness_gamma"] == config.fairness_gamma:
+            return name
+    return f"{config.trail_signal} (gamma {config.fairness_gamma:g})"

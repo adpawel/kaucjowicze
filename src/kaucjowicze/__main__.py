@@ -5,7 +5,16 @@ from collections.abc import Callable
 
 import numpy as np
 
-from kaucjowicze.config import LAYOUTS, MAPS, SCENARIOS, STATIC, TEST_MAP, SimulationConfig
+from kaucjowicze.config import (
+    LAYOUTS,
+    MAPS,
+    SCENARIOS,
+    SOURCE,
+    STATIC,
+    TEST_MAP,
+    TRAILS,
+    SimulationConfig,
+)
 from kaucjowicze.factory import ALGORITHMS, build_simulation
 from kaucjowicze.rewards import REWARDS, SHARED, agent_rewards
 
@@ -30,6 +39,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--reward", choices=REWARDS, default=None, help="reward of ACO agents (default: shared)"
     )
+    parser.add_argument(
+        "--trail",
+        choices=TRAILS,
+        default=SOURCE,
+        help="trail signal of ACO with the shared reward (default: %(default)s)",
+    )
     parser.add_argument("--map", choices=MAPS, default=TEST_MAP, help="map to run on")
     parser.add_argument(
         "--scenario", choices=SCENARIOS, default=STATIC, help="static cans or parties during a run"
@@ -47,7 +62,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.algorithm == "random" and args.reward is not None:
         parser.error("--reward applies only to --algorithm aco")
     reward = SHARED if args.algorithm == "aco" and args.reward is None else args.reward
+    if args.trail != SOURCE and reward != SHARED:
+        parser.error("--trail applies only to --algorithm aco with the shared reward")
     variant = args.algorithm if reward is None else f"{args.algorithm}/{reward}"
+    if args.trail != SOURCE:
+        variant += f"/{args.trail}"
 
     seed = args.seed
     run_gui = None
@@ -57,7 +76,9 @@ def main(argv: list[str] | None = None) -> None:
             seed = int(np.random.default_rng().integers(2**31))
 
     try:
-        config = SimulationConfig(map_name=args.map, scenario=args.scenario, layout=args.layout)
+        config = SimulationConfig(
+            map_name=args.map, scenario=args.scenario, layout=args.layout, **TRAILS[args.trail]
+        )
     except ValueError as error:  # a layout with parties
         parser.error(str(error))
     sim = build_simulation(args.algorithm, seed, reward, config)
@@ -74,6 +95,8 @@ def main(argv: list[str] | None = None) -> None:
 
     per_agent = [agent.cans_collected for agent in sim.agents]
     reward_label = "" if reward is None else f", reward: {reward}"
+    if args.trail != SOURCE:
+        reward_label += f", trail: {args.trail}"
     print(f"Algorithm: {args.algorithm}{reward_label}, seed: {args.seed}")
     print(f"Map: {grid.width}x{grid.height}, bases: {grid.bases}, agents: {len(sim.agents)}")
     print(f"Steps: {sim.step_count} (limit {sim.config.max_steps})")

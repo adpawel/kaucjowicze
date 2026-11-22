@@ -5,6 +5,7 @@
 varies one parameter: every value runs on the same seeds and the files hold all of them (P5 for
 the number of agents, P7 to P9 for the others; `--n-agents` is the same as `--sweep n_agents`).
 `--layout` picks a named can layout of comparison P6, each written to a directory of its own.
+`--trails` adds ACO N1 with other trail signals (comparison P3) to the three usual variants.
 """
 
 import argparse
@@ -13,12 +14,22 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from kaucjowicze.config import LAYOUTS, MAPS, SCENARIOS, STATIC, SimulationConfig
+from kaucjowicze.config import (
+    LAYOUTS,
+    MAPS,
+    SCENARIOS,
+    SOURCE,
+    STATIC,
+    TRAILS,
+    SimulationConfig,
+    trail_name,
+)
 from kaucjowicze.factory import build_simulation
-from kaucjowicze.metrics import RunRecord, record_run
+from kaucjowicze.metrics import RunRecord, objective_j, record_run
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
 
-Variant = tuple[str, str | None]  # algorithm, reward
+# algorithm, reward and, for ACO N1, optionally a trail signal from `TRAILS`
+Variant = tuple[str, str | None] | tuple[str, str | None, str]
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,10 @@ SWEEPS = {
 }
 
 VARIANTS: tuple[Variant, ...] = (("random", None), ("aco", SHARED), ("aco", INDIVIDUAL))
+# Comparison P3 adds ACO N1 with each of the other trail signals
+TRAIL_VARIANTS: tuple[Variant, ...] = tuple(
+    ("aco", SHARED, name) for name in TRAILS if name != SOURCE
+)
 
 RUNS_COLUMNS = (
     "run_id",
@@ -73,6 +88,7 @@ RUNS_COLUMNS = (
     "r",
     "sweep",
     "sweep_value",
+    "trail",
 )
 TIMELINE_COLUMNS = (
     "run_id",
@@ -109,10 +125,23 @@ class ExperimentTables:
     events: list[dict]
 
 
+def _normalise(variant: Variant) -> tuple[str, str | None, str | None]:
+    """(algorithm, reward, trail); ACO without a reward runs the shared one."""
+    algorithm, reward, *rest = variant
+    if algorithm == "aco" and reward is None:
+        reward = SHARED
+    trail = rest[0] if rest else None
+    if trail is not None and (algorithm, reward) != ("aco", SHARED):
+        raise ValueError("A trail signal applies only to ACO with the shared reward")
+    if trail is not None and trail not in TRAILS:
+        raise ValueError(f"Unknown trail: {trail}")
+    return algorithm, reward, trail
+
+
 def _run_row(
     run_id: int, seed: int, variant: Variant, config: SimulationConfig, record: RunRecord
 ) -> dict:
-    algorithm, reward = variant
+    algorithm, reward, _ = _normalise(variant)
     follows_trails = algorithm == "aco" and reward == SHARED
     return {
         "run_id": run_id,
@@ -140,18 +169,20 @@ def _run_row(
         "gini": record.gini,
         "cans_min": record.cans_min,
         "cans_max": record.cans_max,
-        "J": None,  # objective C: its weights are not decided yet
+        "J": objective_j(record.t_90, config.max_steps, record.gini),
         "total_cans": record.total_cans,
         "layout": config.layout,  # empty: the counts of the map and scenario
         "r": config.vision_radius,
         "sweep": None,  # filled in by `run_sweep`
         "sweep_value": None,
+        "trail": trail_name(config) if follows_trails else None,
     }
 
 
 def _variant_label(variant: Variant) -> str:
-    algorithm, reward = variant
-    return algorithm if reward is None else f"{algorithm}/{reward}"
+    algorithm, reward, trail = _normalise(variant)
+    label = algorithm if reward is None else f"{algorithm}/{reward}"
+    return label if trail is None else f"{label}/{trail}"
 
 
 def run_experiment(
@@ -168,14 +199,15 @@ def run_experiment(
     config = config or SimulationConfig()
     seeds = list(seeds)
     # ACO without a reward runs the shared one, so that is what the results have to say
-    variants = [(a, SHARED if a == "aco" and r is None else r) for a, r in variants]
+    variants = [_normalise(variant) for variant in variants]
     total = len(seeds) * len(variants)
     tables = ExperimentTables([], [], [], [])
     pairs = ((s, v) for s in seeds for v in variants)
     for run_id, (seed, variant) in enumerate(pairs, start=first_run_id):
-        algorithm, reward = variant
-        record = record_run(build_simulation(algorithm, seed, reward, config))
-        tables.runs.append(_run_row(run_id, seed, variant, config, record))
+        algorithm, reward, trail = variant
+        run_config = config if trail is None else replace(config, **TRAILS[trail])
+        record = record_run(build_simulation(algorithm, seed, reward, run_config))
+        tables.runs.append(_run_row(run_id, seed, variant, run_config, record))
         tables.timeline.extend(
             {
                 "run_id": run_id,
@@ -356,6 +388,13 @@ def main(argv: list[str] | None = None) -> None:
         "e.g. --sweep bag_capacity 2 5 10 20 40",
     )
     parser.add_argument(
+        "--trails",
+        nargs="+",
+        choices=[name for name in TRAILS if name != SOURCE],
+        default=None,
+        help="also run ACO N1 with these trail signals (comparison P3)",
+    )
+    parser.add_argument(
         "--layout",
         choices=LAYOUTS,
         default=None,
@@ -366,8 +405,8 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=None,
         help="output directory (default: results/<map>, with _dynamic for parties, _agents "
-        "for --n-agents other than the default, _<name> for another --sweep and "
-        "_layout_<name> for --layout)",
+        "for --n-agents other than the default, _<name> for another --sweep, _trails for "
+        "--trails and _layout_<name> for --layout)",
     )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
@@ -375,6 +414,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.max_steps is not None and args.max_steps <= 0:
         parser.error("--max-steps must be positive")
     sweep = _parse_sweep(parser, args, defaults.n_agents)
+    if args.trails is not None and (sweep is not None or args.layout is not None):
+        parser.error("--trails runs with the default parameters only, not with a sweep or layout")
+    if args.trails is not None and len(set(args.trails)) != len(args.trails):
+        parser.error("--trails must not repeat a signal")
+    variants = VARIANTS + tuple(("aco", SHARED, name) for name in args.trails or ())
 
     def report(done: int, total: int, label: str) -> None:
         print(f"[{done}/{total}] {label}", flush=True)
@@ -395,9 +439,11 @@ def main(argv: list[str] | None = None) -> None:
         folder += f"_{SWEEPS[sweep[0]].folder}"
     if args.layout is not None:  # `current` too, so the default results stay as they are
         folder += f"_layout_{args.layout}"
+    if args.trails is not None:
+        folder += "_trails"
     output = args.output or Path("results") / folder
     if sweep is None:
-        tables = run_experiment(seeds, config, progress=report)
+        tables = run_experiment(seeds, config, variants, progress=report)
     else:
         tables = run_sweep(seeds, *sweep, config, progress=report)
     write_tables(tables, output)

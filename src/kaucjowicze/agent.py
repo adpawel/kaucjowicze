@@ -25,3 +25,5 @@ class Agent:
     source_cans: int = 0  # cans seen left behind at the last pick-up; sets trail strength
     remembered_source: Position | None = None  # private memory of the richest known source
     remembered_cans: int = 0  # cans the agent last saw left at the remembered source
+    trip_steps: int = 0  # steps since the agent last left a base
+    trip_length: int = 0  # L: steps of the whole trip, known once the return starts

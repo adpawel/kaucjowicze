@@ -34,6 +34,22 @@ def steps_to_reach(collected: Sequence[int], total: int, percent: int) -> int | 
     return next((step for step, count in enumerate(collected) if count >= needed), None)
 
 
+def speed_norm(t_90: int | None, max_steps: int) -> float:
+    """Pace on [0, 1]: 1 - t_90 / T; a run below 90% by the limit counts as T, so 0."""
+    return 1.0 - (max_steps if t_90 is None else t_90) / max_steps
+
+
+# Weight of the pace in the `J` column of runs.csv; the report shows other weights too
+J_WEIGHT = 0.5
+
+
+def objective_j(t_90: int | None, max_steps: int, gini: float, w1: float = J_WEIGHT) -> float:
+    """Success measure C of PLAN.md 4.2: w1 * speed_norm + (1 - w1) * (1 - Gini)."""
+    if not 0.0 <= w1 <= 1.0:
+        raise ValueError("The weight of the pace must be in [0, 1]")
+    return w1 * speed_norm(t_90, max_steps) + (1 - w1) * (1 - gini)
+
+
 @dataclass(frozen=True)
 class TimelineRow:
     """State of a run after `step` steps."""

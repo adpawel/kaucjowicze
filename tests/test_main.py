@@ -209,3 +209,19 @@ def test_window_gets_the_chosen_layout(monkeypatch):
     sim = calls[0]["make_sim"]()
     assert sim.config.layout == "many-small"
     assert sim.config.n_clusters == 18
+
+
+def test_trail_signal_is_named_in_the_output(capsys):
+    main(["--algorithm", "aco", "--trail", "equal-", "--seed", "0"])
+    assert "reward: shared, trail: equal-" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["--trail", "speed"], ["--algorithm", "aco", "--reward", "individual", "--trail", "speed"]],
+)
+def test_trail_signal_needs_aco_with_the_shared_reward(arguments, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(arguments)
+    assert exc.value.code != 0
+    assert "--trail applies only" in capsys.readouterr().err

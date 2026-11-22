@@ -11,7 +11,7 @@ import numpy as np
 
 from kaucjowicze.agent import Agent, AgentState
 from kaucjowicze.cans import SpawnEvent
-from kaucjowicze.config import SimulationConfig
+from kaucjowicze.config import EQUAL, SimulationConfig
 from kaucjowicze.grid import Grid, Position
 from kaucjowicze.pathfinding import (
     distance_map,
@@ -21,6 +21,7 @@ from kaucjowicze.pathfinding import (
     within_radius,
 )
 from kaucjowicze.policies import MovementPolicy
+from kaucjowicze.rewards import trail_amount
 
 
 @dataclass
@@ -99,6 +100,8 @@ class Simulation:
         self.event_logs = [EventLog(event) for event in self.events]
         self.events_spawned = 0
         self.ledger = CanLedger(grid, len(self.events))
+        self.trail_laid = 0.0  # all trail laid so far, before evaporation
+        self.trail_steps = 0  # cells left by carrying agents, with or without trail
         self._spawn_due()
 
     @property
@@ -144,6 +147,7 @@ class Simulation:
         self._spawn_due()
 
     def _search(self, agent: Agent) -> None:
+        agent.trip_steps += 1  # draws no number, so the runs of every signal stay as they were
         target = first_step_to_nearest_can(self.grid, agent.pos, self.config.vision_radius)
         if target == agent.pos:
             self.grid.take_can(agent.pos)
@@ -153,7 +157,7 @@ class Simulation:
             agent.source_cans = seen_cans(self.grid, agent.pos, self.config.vision_radius)
             self._remember_source(agent)
             if agent.bag >= self.config.bag_capacity:
-                agent.state = AgentState.CARRYING
+                self._start_return(agent)
             return
         if target is not None:
             agent.steps_without_can = 0
@@ -162,7 +166,7 @@ class Simulation:
 
         agent.steps_without_can += 1
         if agent.bag > 0 and agent.steps_without_can >= self.config.return_patience:
-            agent.state = AgentState.CARRYING
+            self._start_return(agent)
             return
         self._move(agent, self.policy.choose_move(agent, self.grid, self.rng, self.agents))
 
@@ -185,6 +189,16 @@ class Simulation:
             agent.remembered_source = agent.pos if seen > 0 else None
             agent.remembered_cans = seen
 
+    def _start_return(self, agent: Agent) -> None:
+        """Turn back to a base: a full bag or no new can for too long.
+
+        The trip length L is the steps so far and the known distance home, so it is fixed for the
+        whole return. Off a base the return takes exactly that distance.
+        """
+        x, y = agent.pos
+        agent.trip_length = agent.trip_steps + int(self.distance[y, x])
+        agent.state = AgentState.CARRYING
+
     def _carry(self, agent: Agent) -> None:
         if not self.grid.is_base(agent.pos):
             self._lay_trail(agent)
@@ -196,7 +210,14 @@ class Simulation:
         """Mark the cell being left, so the trail reaches the source and spares the base."""
         if self.pheromone is not None:
             x, y = agent.pos
-            self.pheromone[y, x] += self.config.trail_deposit * agent.source_cans
+            mean_cans = self._mean_delivered() if self.config.trail_signal == EQUAL else 0.0
+            amount = trail_amount(agent, self.config, mean_cans)
+            self.pheromone[y, x] += amount
+            self.trail_laid += amount
+            self.trail_steps += 1
+
+    def _mean_delivered(self) -> float:
+        return sum(agent.cans_collected for agent in self.agents) / len(self.agents)
 
     def _deposit(self, agent: Agent) -> None:
         self.collected += agent.bag
@@ -205,6 +226,8 @@ class Simulation:
         agent.trips += 1
         agent.steps_without_can = 0
         agent.source_cans = 0
+        agent.trip_steps = 0
+        agent.trip_length = 0
         agent.state = AgentState.SEARCHING
 
     @staticmethod
