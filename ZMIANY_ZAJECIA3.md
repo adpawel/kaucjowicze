@@ -2,7 +2,7 @@
 
 Ten plik opisuje prace od prezentacji na zajęcia 2 (`docs/aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 16 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19) są scalone z `master`. Analiza wrażliwości na worek, promień widzenia i parametry śladu (P7, P8, P9, issue #17) jest na gałęzi `feat/sensitivity`.
+**Stan:** scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19) są scalone z `master`. Analiza wrażliwości na worek, promień widzenia i parametry śladu (P7, P8, P9, issue #17) jest na gałęzi `feat/sensitivity`, a sygnały śladu z nagrody i miara J (P3, issue #7) na gałęzi `feat/reward-signals`.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -10,12 +10,12 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 
 | Kierunek | Stan |
 |---|---|
-| nagroda, która zmienia ilość zostawianego śladu, i cel J | nie zaczęte (plan w `NAGRODY.md`, porównanie P3) |
+| nagroda, która zmienia ilość zostawianego śladu, i cel J | **zrobione (porównanie P3, `ALGORITHM.md` §20)** |
 | analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **zrobione:** liczba agentów (P5, `ALGORITHM.md` §16), układ puszek (P6, §17), worek i promień widzenia (P7, P8, §18), ρ, α i ε (P9, §19) |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
 | populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
 
-Ograniczenia ze slajdu 8 nadal obowiązują. N1 i N2 to wciąż ręczne reguły: nagroda nie steruje ruchem, a N2 nie używa feromonu. Unikanie tłoku też dalej prawie nie działa.
+Ograniczenia ze slajdu 8 częściowo obowiązują. N1 i N2 to wciąż ręczne reguły, a N2 nie używa feromonu. Nagroda może już sterować ruchem przez ilość śladu (P3), ale w pomiarze niczego to nie zmieniło. Unikanie tłoku też dalej prawie nie działa.
 
 ## Scenariusz dynamiczny
 
@@ -74,7 +74,7 @@ Miasteczko, ziarna 200–229, T = 20000. Podajemy średnią ± przedział 95%.
 | `plots.py` | porównanie P4: `p4_cans_on_map.png`, `p4_party_latency.png` i tabele w `summary.md` |
 | `__main__.py`, `view.py` | opcja `--scenario` w podglądzie, licznik imprez w pasku stanu |
 
-Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397, a po P7–P9 422. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
+Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397, po P7–P9 422, a po P3 475. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
 
 Po przeglądzie kodu dodaliśmy kilka poprawek. Nie zmieniły wyników P4, bo w pomiarze nie było imprez niezebranych do limitu:
 - brak pierwszego podniesienia jest cenzurowany tak samo jak brak 50%,
@@ -234,8 +234,52 @@ python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --swe
 python -m kaucjowicze.plots --input results/campus_bag      # i tak samo _vision, _rho, _alpha, _eps
 ```
 
+## Sygnały śladu z nagrody i miara J (P3)
+
+**Pytanie:** czy cel kolonii, wprowadzony do ACO przez ilość zostawianego śladu, zmienia jej zachowanie. To propozycja z `NAGRODY.md`: wszystkie warianty to to samo ACO N1, a różnią się tylko tym, ile śladu agent zostawia. Szczegóły są w `ALGORITHM.md` §20.
+
+| Sygnał | Cel | Ślad na komórkę | Miara sukcesu |
+|---|---|---|---|
+| `source` (obecne N1) | bogate źródła | `q · n` | t₉₀ |
+| `speed` | tempo | `q_s · (b / L)`, gdy n > 0 | t₉₀ |
+| `equal+` / `equal-` | równość | `q · n · ((c_i + 1) / (c̄ + 1))^(±1)` | Gini |
+
+- L to długość całego kursu, znana od początku powrotu. q_s = 215 skalibrowaliśmy na osobnych ziarnach 100–109, tak żeby średni ślad był taki sam jak w `source`.
+- Miara sukcesu `J = w₁ · (1 − t₉₀ / T) + (1 − w₁) · (1 − Gini)` jest teraz w `runs.csv` (w₁ = 0.5) dla każdego wariantu, a raport podaje ją dla w₁ = 0, 0.25, 0.5, 0.75 i 1.
+- `source` odtwarza dokładnie wcześniejsze N1, więc P1, P2 i P4–P9 się nie zmieniają.
+
+**Hipotezy (zapisane przed pomiarem):** `speed` ma niższe t₉₀, `equal+` niższy Gini, a dla `equal-` nie przewidujemy kierunku. Trzy testy Manna-Whitneya względem `source`, korekta Bonferroniego na 3.
+
+## Wyniki P3
+
+Miasteczko, ziarna 200–229, T = 20000 (pomiar główny), oraz mapa testowa, ziarna 0–29 (powtórzenie).
+
+| Wariant | t₉₀ | Gini | J (w₁ = 0.5) | t₉₀ (mapa testowa) | Gini (mapa testowa) |
+|---|---|---|---|---|---|
+| losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | 0.615 | 1657 ± 224 | 0.373 ± 0.018 |
+| N1 (`source`) | 2439 ± 559 | 0.516 ± 0.027 | 0.681 | 790 ± 109 | 0.398 ± 0.031 |
+| N2 | 2360 ± 471 | 0.689 ± 0.027 | 0.596 | 816 ± 112 | 0.555 ± 0.022 |
+| `speed` | 2320 ± 438 | 0.523 ± 0.032 | 0.680 | 953 ± 146 | 0.384 ± 0.021 |
+| `equal+` | 2489 ± 732 | 0.505 ± 0.026 | 0.685 | 851 ± 123 | 0.391 ± 0.021 |
+| `equal-` | 2408 ± 691 | 0.511 ± 0.030 | 0.684 | 874 ± 130 | 0.379 ± 0.025 |
+
+**Wnioski:**
+- **Żadna hipoteza się nie potwierdziła.** Żaden sygnał nie zmienia istotnie swojej miary na żadnej mapie (Miasteczko: p = 0.98, 0.31, 0.47; mapa testowa: p = 0.092, 0.87, 0.47).
+- **Cztery sygnały dają prawie tę samą kolonię.** O zachowaniu decyduje to, czy jest ślad, a nie ile go jest. To samo pokazało P9: N1 jest mało wrażliwe na siłę śladu.
+- **J zależy od wag:** przy w₁ ≤ 0.25 najwyższe J ma losowy spacer (najrówniejszy), przy w₁ ≥ 0.5 warianty ACO. Warianty ACO różnią się o mniej niż 0.01, czyli w granicach szumu. N2 ma najniższe J przy każdej wadze poniżej 1.
+- **Wniosek dla pytania o nagrody:** cel wprowadzony przez siłę śladu nie steruje kolonią. Różnicę między celami dają reguły (ślad kontra prywatna pamięć), a nie ilość śladu.
+
+```
+python tools/calibrate_speed_deposit.py --map campus
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --trails speed equal+ equal-
+python -m kaucjowicze.plots --input results/campus_trails
+python -m kaucjowicze --algorithm aco --trail speed --map campus --seed 200 --gui
+```
+
+**Zmiany w kodzie:** pola `trail_signal`, `speed_deposit` i `fairness_gamma` oraz słownik `TRAILS` w `config.py`, licznik kroków kursu i L w `agent.py` i `simulation.py`, `trail_amount` w `rewards.py`, `speed_norm` i `objective_j` w `metrics.py`, opcja `--trails` i kolumny `trail` i `J` w `experiments.py`, opcja `--trail` w podglądzie, raport P3 w `plots.py` (`p3_collection_curve.png`, `p3_tradeoff.png`), skrypt `tools/calibrate_speed_deposit.py`.
+
 ## Co zostało do zrobienia
 
 - metryka przywiązania do wyczerpanych skupisk w P4: ile czasu agenci spędzają przy pustych źródłach,
-- nagroda, która zmienia ilość zostawianego śladu, i cel J (porównanie P3, issue #7),
-- populacja mieszana i ograniczenia śladu z MAX–MIN Ant System.
+- populacja mieszana i ograniczenia śladu z MAX–MIN Ant System,
+- pytanie do prowadzącego z `NAGRODY.md` §5 (po P3 nie zmienia już planu prac).

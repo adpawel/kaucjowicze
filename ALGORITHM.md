@@ -841,3 +841,53 @@ Wynik negatywny też jest wynikiem: jeśli sygnały nie zmienią istotnie t₉�
 **Zastrzeżenie znane przed pomiarem:** L zawiera przypadkowe błądzenie, więc w `speed` mierzy też szczęście w szukaniu, a nie tylko odległość źródła (`NAGRODY.md`, pułapki).
 
 **Kod:** `--trails speed equal+ equal-` w `experiments.py` dodaje warianty do trzech zwykłych i zapisuje je do `results/<mapa>_trails`. `runs.csv` ma nową kolumnę `trail` (nazwa sygnału, tylko dla N1) i wypełnioną kolumnę `J`. `python -m kaucjowicze --algorithm aco --trail speed` pokazuje sygnał w podglądzie. Raport `plots.py` dodaje P3 do P1 i P2 (te same przebiegi): krzywe zbierania czterech sygnałów, wykres t₉₀ kontra Gini, tabelę J dla wag i trzy testy. Nowe warianty mają kolejne kolory palety (żółty, różowy, zielony) i linie przerywane, żeby nie różniły się samym kolorem.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --trails speed equal+ equal-` (180 przebiegów) i `python -m kaucjowicze.experiments --seeds 30 --trails speed equal+ equal-` (mapa testowa, 180 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_trails` i `--input results/test_trails`. Średnia ± 95%.
+
+**Kontrola:** losowy spacer, N1 i N2 mają w obu pomiarach te same t₉₀ i Gini co punkty 14 i 12.
+
+**Miasteczko (pomiar główny):**
+
+| Wariant | t₉₀ | Gini | J, w₁ = 0 | J, w₁ = 0.25 | J, w₁ = 0.5 | J, w₁ = 0.75 | J, w₁ = 1 |
+|---|---|---|---|---|---|---|---|
+| losowy spacer | 7257 ± 1588 | 0.407 ± 0.023 | **0.593** | **0.604** | 0.615 | 0.626 | 0.637 |
+| N1 (`source`) | 2439 ± 559 | 0.516 ± 0.027 | 0.484 | 0.582 | 0.681 | 0.780 | 0.878 |
+| N2 | 2360 ± 471 | 0.689 ± 0.027 | 0.311 | 0.454 | 0.596 | 0.739 | 0.882 |
+| `speed` | 2320 ± 438 | 0.523 ± 0.032 | 0.477 | 0.579 | 0.680 | **0.782** | **0.884** |
+| `equal+` | 2489 ± 732 | 0.505 ± 0.026 | 0.495 | 0.590 | **0.685** | 0.780 | 0.876 |
+| `equal-` | 2408 ± 691 | 0.511 ± 0.030 | 0.489 | 0.587 | 0.684 | 0.782 | 0.880 |
+
+Pogrubienie oznacza najwyższe średnie J przy danej wadze. Przedziały J mają ± 0.02–0.08, więc między wariantami ACO (różnice do 0.008) nie rozstrzygają niczego.
+
+| Test | Średnia sygnału | Średnia `source` | p | Istotne po korekcie (próg 0.0167) |
+|---|---|---|---|---|
+| `speed`, t₉₀ | 2320 | 2439 | 0.98 | nie |
+| `equal+`, Gini | 0.505 | 0.516 | 0.31 | nie |
+| `equal-`, Gini | 0.511 | 0.516 | 0.47 | nie |
+
+**Mapa testowa (pomiar powtórzeniowy):**
+
+| Wariant | t₉₀ | Gini | J, w₁ = 0.5 |
+|---|---|---|---|
+| losowy spacer | 1657 ± 224 | 0.373 ± 0.018 | 0.538 |
+| N1 (`source`) | 790 ± 109 | 0.398 ± 0.031 | **0.669** |
+| N2 | 816 ± 112 | 0.555 ± 0.022 | 0.586 |
+| `speed` | 953 ± 146 | 0.384 ± 0.021 | 0.649 |
+| `equal+` | 851 ± 123 | 0.391 ± 0.021 | 0.663 |
+| `equal-` | 874 ± 130 | 0.379 ± 0.025 | 0.665 |
+
+| Test | Średnia sygnału | Średnia `source` | p | Istotne po korekcie |
+|---|---|---|---|---|
+| `speed`, t₉₀ | 953 | 790 | 0.092 | nie |
+| `equal+`, Gini | 0.391 | 0.398 | 0.87 | nie |
+| `equal-`, Gini | 0.379 | 0.398 | 0.47 | nie |
+
+**Wnioski:**
+
+- **Żadna hipoteza się nie potwierdziła.** Na obu mapach żaden sygnał nie zmienia istotnie swojej miary sukcesu względem `source`. `speed` nie przyspiesza zbiórki (na Miasteczku 2320 wobec 2439, p = 0.98, a na mapie testowej jest średnio wolniejsze, 953 wobec 790, p = 0.092), a `equal+` i `equal-` nie zmieniają Giniego (różnice do 0.02).
+- **Cztery sygnały dają prawie tę samą kolonię.** Na wykresie `p3_tradeoff.png` ich punkty się pokrywają, a od nich daleko leżą losowy spacer (wolny i równy) oraz N2 (szybkie i nierówne). Zgadza się to z punktem 19: przy zachowaniu kolonii rządzi to, *czy* jest ślad, a nie dokładnie *ile* go jest.
+- **Prawdopodobne wyjaśnienie (niesprawdzone):** sygnały zmieniają tylko względną siłę śladów, a przy α = 1 i τ₀ = 0.01 ślad o sile powyżej około 1 i tak dostaje ponad 94% wagi (punkt 4). W `equal±` waga w_i odchyla ślad co najwyżej kilkukrotnie, a w `speed` wybór między źródłami zależy od b / L, które różni się między kursami mniej niż n. Kolejność wyboru kierunku się więc prawie nie zmienia.
+- **J jawnie zależy od wag.** Przy w₁ ≤ 0.25 (liczy się głównie równość) najwyższe J ma losowy spacer, a przy w₁ ≥ 0.5 warianty ACO. N2 ma najniższe J przy każdej wadze poniżej 1 i dopiero przy w₁ = 1 dogania N1. Między wariantami ACO J różni się o mniej niż 0.01, czyli w granicach szumu, więc **„najlepszy” wariant ACO zależy od przypadku, a nie od celu.**
+- **Odpowiedź na pytanie z `NAGRODY.md`:** wprowadzenie celu przez ilość śladu nie wystarcza, żeby nagroda sterowała kolonią w tym modelu. Nagroda działa realnie dopiero na poziomie reguł (ślad kontra pamięć prywatna w N2), a nie siły śladu. Ten wniosek dotyczy badanych sygnałów i wartości domyślnych α, τ₀, q.
