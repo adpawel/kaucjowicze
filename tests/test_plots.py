@@ -7,22 +7,25 @@ pytest.importorskip("matplotlib")
 pytest.importorskip("scipy")
 
 from kaucjowicze.config import SimulationConfig  # noqa: E402
-from kaucjowicze.experiments import run_agent_counts, run_experiment, write_tables  # noqa: E402
+from kaucjowicze.experiments import (  # noqa: E402
+    run_agent_counts,
+    run_experiment,
+    run_sweep,
+    write_tables,
+)
 from kaucjowicze.plots import (  # noqa: E402
     Results,
     _percent,
     _with_ci,
     aco_advantage,
-    agent_sweep_significance,
-    agent_sweep_table,
     censored,
     check_layout_inputs,
     collection_curves,
     combine_results,
     curve_band,
     format_summary,
-    has_agent_sweep,
     has_layout_sweep,
+    has_sweep,
     layout_order,
     layout_significance,
     layout_table,
@@ -33,6 +36,9 @@ from kaucjowicze.plots import (  # noqa: E402
     report_text,
     significance_table,
     summary_table,
+    sweep_parameter,
+    sweep_significance,
+    sweep_table,
     write_report,
 )
 
@@ -359,9 +365,9 @@ def test_agent_sweep_table_has_a_row_per_count_and_variant():
             for s, t in enumerate(times)
         ]
     )
-    table = agent_sweep_table(runs)
+    table = sweep_table(runs)
 
-    assert list(zip(table["n_agents"], table["variant"], strict=True)) == [
+    assert list(zip(table["value"], table["variant"], strict=True)) == [
         (5, "random"),
         (5, "aco/shared"),
         (10, "random"),
@@ -396,9 +402,10 @@ def test_agent_sweep_tests_each_count_with_bonferroni():
         rows += [
             {"n_agents": n, "variant": "random", "seed": s, "t_90": 50.0 + s} for s in range(8)
         ]
-    table = agent_sweep_significance(_sweep(rows))
+    table = sweep_significance(_sweep(rows))
 
-    assert table["n_agents"].tolist() == [5, 10]
+    assert table["value"].tolist() == [5, 10]
+    assert table["pairs"].isna().all()  # P5 keeps its unpaired Mann-Whitney test
     assert (table["threshold"] == 0.025).all()
     assert table["significant"].all()
 
@@ -415,8 +422,8 @@ def sweep_dir(tmp_path_factory):
 
 def test_sweep_report_replaces_the_other_comparisons(sweep_dir, result_dir, tmp_path):
     results = load_results(sweep_dir)
-    assert has_agent_sweep(results)
-    assert not has_agent_sweep(load_results(result_dir))
+    assert has_sweep(results)
+    assert not has_sweep(load_results(result_dir))
 
     names = {path.name for path in write_report(results, tmp_path)}
 
@@ -591,3 +598,92 @@ def test_layout_inputs_must_differ_only_in_the_layout(layout_dirs, result_dir, t
     without_layout = load_results(result_dir)  # e.g. results/campus or results/campus_agents
     assert "one --layout" in check_layout_inputs([parts[0], without_layout])
     assert "different" in check_layout_inputs([parts[0], parts[0]])
+
+
+@pytest.fixture(scope="module")
+def bag_dir(tmp_path_factory):
+    config = SimulationConfig(
+        width=30,
+        height=20,
+        n_clusters=2,
+        cans_per_cluster=5,
+        n_background_cans=2,
+        n_agents=3,
+        max_steps=150,
+    )
+    output = tmp_path_factory.mktemp("bag")
+    write_tables(run_sweep([0, 1, 2], "bag_capacity", [2, 10], config), output)
+    return output
+
+
+def test_sweep_parameter_is_read_from_the_runs(bag_dir, sweep_dir, result_dir):
+    assert sweep_parameter(load_results(bag_dir).runs) == "bag_capacity"
+    assert sweep_parameter(load_results(sweep_dir).runs) == "n_agents"
+    assert sweep_parameter(load_results(result_dir).runs) is None
+
+
+def test_agent_sweep_without_sweep_columns_is_still_recognised(sweep_dir):
+    runs = load_results(sweep_dir).runs.drop(columns=["sweep", "sweep_value"])
+    assert sweep_parameter(runs) == "n_agents"
+    assert sweep_table(runs)["value"].tolist() == [2, 2, 2, 4, 4, 4]
+
+
+def test_mixed_sweeps_are_rejected():
+    runs = _sweep(
+        [
+            {"n_agents": 5, "variant": "random", "seed": 0, "sweep": "bag_capacity"},
+            {"n_agents": 5, "variant": "random", "seed": 0, "sweep": "vision_radius"},
+        ]
+    )
+    with pytest.raises(ValueError, match="mix"):
+        sweep_parameter(runs)
+
+
+def test_other_sweeps_have_no_agent_steps_and_test_pairs_by_seed():
+    rows = []
+    for k in (2, 10):
+        for s in range(8):
+            rows.append({"variant": "aco/shared", "seed": s, "t_90": 10.0 + s, "sweep_value": k})
+            rows.append({"variant": "random", "seed": s, "t_90": 50.0 + 2 * s, "sweep_value": k})
+    runs = _sweep([{**row, "n_agents": 3, "sweep": "bag_capacity"} for row in rows])
+
+    table = sweep_table(runs)
+    assert "work_mean" not in table
+    assert table["value"].tolist() == [2, 2, 10, 10]
+
+    tests = sweep_significance(runs)
+    assert tests["value"].tolist() == [2, 10]
+    assert tests["pairs"].tolist() == [8, 8]
+    # every pair favours ACO, so the exact two-sided Wilcoxon p-value is 2 / 2^8
+    assert tests["p_value"].tolist() == pytest.approx([2 / 2**8] * 2)
+    assert (tests["threshold"] == 0.025).all()
+
+
+def test_sweep_of_bag_capacity_report(bag_dir, tmp_path):
+    results = load_results(bag_dir)
+    names = {path.name for path in write_report(results, tmp_path)}
+
+    assert names == {
+        "p7_t90_vs_bag.png",
+        "p7_gini_vs_bag.png",
+        "p7_aco_advantage.png",
+        "summary.md",
+    }
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert summary.startswith("# Bag capacity (P7)")
+    assert "Wilcoxon" in summary
+    assert "Agent-steps" not in summary
+    assert "| 2 | random |" in summary and "| 10 | aco/shared |" in summary
+
+
+def test_trail_parameter_sweep_keeps_fractions(tmp_path):
+    config = SimulationConfig(
+        width=30, height=20, n_clusters=2, cans_per_cluster=5, n_agents=3, max_steps=100
+    )
+    write_tables(run_sweep([0, 1], "exploration_rate", [0.0, 0.3], config), tmp_path)
+    results = load_results(tmp_path)
+    names = {path.name for path in write_report(results, tmp_path / "figures")}
+
+    assert "p9_eps_t90_vs_eps.png" in names
+    assert sweep_table(results.runs)["value"].tolist()[::3] == [0.0, 0.3]
+    assert "| 0.3 | " in report_text(results)

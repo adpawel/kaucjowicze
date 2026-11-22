@@ -1,8 +1,9 @@
 """Run every variant on a shared list of seeds and save the measurements to CSV files.
 
 `python -m kaucjowicze.experiments` writes `runs.csv`, `timeline.csv`, `agents.csv` and
-`events.csv` (parties of the dynamic scenario; only a header in the static one). With several
-`--n-agents` values every count runs on the same seeds and the files hold all of them (P5).
+`events.csv` (parties of the dynamic scenario; only a header in the static one). `--sweep`
+varies one parameter: every value runs on the same seeds and the files hold all of them (P5 for
+the number of agents, P7 to P9 for the others; `--n-agents` is the same as `--sweep n_agents`).
 `--layout` picks a named can layout of comparison P6, each written to a directory of its own.
 """
 
@@ -18,6 +19,25 @@ from kaucjowicze.metrics import RunRecord, record_run
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
 
 Variant = tuple[str, str | None]  # algorithm, reward
+
+
+@dataclass(frozen=True)
+class Sweep:
+    """A parameter of `SimulationConfig` that a sensitivity sweep varies, one at a time."""
+
+    kind: type  # type of its values on the command line
+    symbol: str  # short name in progress messages and reports
+    folder: str  # suffix of the default results directory
+
+
+SWEEPS = {
+    "n_agents": Sweep(int, "N", "agents"),
+    "bag_capacity": Sweep(int, "k", "bag"),
+    "vision_radius": Sweep(int, "r", "vision"),
+    "evaporation_rate": Sweep(float, "rho", "rho"),
+    "pheromone_alpha": Sweep(float, "alpha", "alpha"),
+    "exploration_rate": Sweep(float, "eps", "eps"),
+}
 
 VARIANTS: tuple[Variant, ...] = (("random", None), ("aco", SHARED), ("aco", INDIVIDUAL))
 
@@ -50,6 +70,9 @@ RUNS_COLUMNS = (
     "J",
     "total_cans",
     "layout",
+    "r",
+    "sweep",
+    "sweep_value",
 )
 TIMELINE_COLUMNS = (
     "run_id",
@@ -120,6 +143,9 @@ def _run_row(
         "J": None,  # objective C: its weights are not decided yet
         "total_cans": record.total_cans,
         "layout": config.layout,  # empty: the counts of the map and scenario
+        "r": config.vision_radius,
+        "sweep": None,  # filled in by `run_sweep`
+        "sweep_value": None,
     }
 
 
@@ -194,6 +220,49 @@ def run_experiment(
     return tables
 
 
+def run_sweep(
+    seeds: Iterable[int],
+    parameter: str,
+    values: Sequence[float],
+    config: SimulationConfig | None = None,
+    variants: Sequence[Variant] = VARIANTS,
+    progress: Callable[[int, int, str], None] | None = None,
+) -> ExperimentTables:
+    """Run the experiment once per value of `parameter`, on the same seeds, in one set of tables.
+
+    Every run row names the parameter (`sweep`) and its value (`sweep_value`), so a report can
+    group the runs by value also for parameters that `runs.csv` records only for ACO N1.
+    """
+    if parameter not in SWEEPS:
+        raise ValueError(f"Unknown sweep parameter: {parameter}")
+    config = config or SimulationConfig()
+    seeds = list(seeds)
+    symbol = SWEEPS[parameter].symbol
+    total = len(values) * len(seeds) * len(variants)
+    tables = ExperimentTables([], [], [], [])
+    for value in values:
+        first = len(tables.runs)
+
+        def report(done: int, _: int, label: str, value=value, first: int = first) -> None:
+            progress(first + done, total, f"{symbol} = {value:g}, {label}")
+
+        part = run_experiment(
+            seeds,
+            replace(config, **{parameter: value}),
+            variants,
+            report if progress is not None else None,
+            first_run_id=first,
+        )
+        for row in part.runs:
+            row["sweep"] = parameter
+            row["sweep_value"] = value
+        tables.runs.extend(part.runs)
+        tables.timeline.extend(part.timeline)
+        tables.agents.extend(part.agents)
+        tables.events.extend(part.events)
+    return tables
+
+
 def run_agent_counts(
     seeds: Iterable[int],
     counts: Sequence[int],
@@ -201,29 +270,8 @@ def run_agent_counts(
     variants: Sequence[Variant] = VARIANTS,
     progress: Callable[[int, int, str], None] | None = None,
 ) -> ExperimentTables:
-    """Run the experiment once per number of agents, on the same seeds, in one set of tables."""
-    config = config or SimulationConfig()
-    seeds = list(seeds)
-    total = len(counts) * len(seeds) * len(variants)
-    tables = ExperimentTables([], [], [], [])
-    for count in counts:
-        first = len(tables.runs)
-
-        def report(done: int, _: int, label: str, count: int = count, first: int = first) -> None:
-            progress(first + done, total, f"N = {count}, {label}")
-
-        part = run_experiment(
-            seeds,
-            replace(config, n_agents=count),
-            variants,
-            report if progress is not None else None,
-            first_run_id=first,
-        )
-        tables.runs.extend(part.runs)
-        tables.timeline.extend(part.timeline)
-        tables.agents.extend(part.agents)
-        tables.events.extend(part.events)
-    return tables
+    """The sweep of the number of agents (comparison P5)."""
+    return run_sweep(seeds, "n_agents", counts, config, variants, progress)
 
 
 def _write_csv(path: Path, columns: Sequence[str], rows: Iterable[dict]) -> None:
@@ -244,6 +292,43 @@ def write_tables(tables: ExperimentTables, output_dir: str | Path) -> None:
     _write_csv(output / "events.csv", EVENTS_COLUMNS, tables.events)
 
 
+def _sweep_argument(text: str) -> str | float:
+    """First word of `--sweep` is a parameter name, the rest are its values."""
+    if text in SWEEPS:
+        return text
+    try:
+        return float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a parameter or a number: {text}") from None
+
+
+def _parse_sweep(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, default_agents: int
+) -> tuple[str, list] | None:
+    """The swept parameter and its values; `None` for a plain run at the defaults."""
+    if args.sweep is not None:
+        if args.n_agents != [default_agents]:
+            parser.error("--sweep and --n-agents cannot be combined, use --sweep n_agents")
+        parameter, *values = args.sweep
+        if parameter not in SWEEPS or not values or any(v in SWEEPS for v in values):
+            parser.error(f"--sweep takes one of {', '.join(SWEEPS)} and then its values")
+        kind = SWEEPS[parameter].kind
+        if kind is int and any(not float(v).is_integer() for v in values):
+            parser.error(f"--sweep {parameter} takes whole numbers")
+        values = [kind(v) for v in values]
+    elif args.n_agents != [default_agents]:
+        parameter, values = "n_agents", args.n_agents
+    else:
+        return None
+    if len(set(values)) != len(values):
+        parser.error(f"--sweep {parameter} must not repeat a value")
+    if parameter == "n_agents" and min(values) <= 0:
+        parser.error("--n-agents must be positive")
+    if args.layout is not None:
+        parser.error("--layout runs with the default parameters only, not with a sweep")
+    return parameter, values
+
+
 def main(argv: list[str] | None = None) -> None:
     defaults = SimulationConfig()
     parser = argparse.ArgumentParser(description="Compare the variants on a shared list of seeds")
@@ -262,6 +347,15 @@ def main(argv: list[str] | None = None) -> None:
         help="number of agents; several values run each of them (default: %(default)s)",
     )
     parser.add_argument(
+        "--sweep",
+        type=_sweep_argument,
+        nargs="+",
+        default=None,
+        metavar="PARAMETER VALUE",
+        help=f"vary one parameter ({', '.join(SWEEPS)}) over the given values, "
+        "e.g. --sweep bag_capacity 2 5 10 20 40",
+    )
+    parser.add_argument(
         "--layout",
         choices=LAYOUTS,
         default=None,
@@ -272,19 +366,15 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=None,
         help="output directory (default: results/<map>, with _dynamic for parties, _agents "
-        "for --n-agents other than the default and _layout_<name> for --layout)",
+        "for --n-agents other than the default, _<name> for another --sweep and "
+        "_layout_<name> for --layout)",
     )
     args = parser.parse_args(argv)
     if args.seeds <= 0:
         parser.error("--seeds must be positive")
     if args.max_steps is not None and args.max_steps <= 0:
         parser.error("--max-steps must be positive")
-    if min(args.n_agents) <= 0:
-        parser.error("--n-agents must be positive")
-    if len(set(args.n_agents)) != len(args.n_agents):
-        parser.error("--n-agents must not repeat a value")
-    if args.layout is not None and args.n_agents != [defaults.n_agents]:
-        parser.error("--layout runs with the default number of agents only")
+    sweep = _parse_sweep(parser, args, defaults.n_agents)
 
     def report(done: int, total: int, label: str) -> None:
         print(f"[{done}/{total}] {label}", flush=True)
@@ -293,17 +383,24 @@ def main(argv: list[str] | None = None) -> None:
         config = SimulationConfig(
             map_name=args.map, scenario=args.scenario, layout=args.layout, max_steps=args.max_steps
         )
+        if sweep is not None:  # every value must make a valid configuration before any run
+            for value in sweep[1]:
+                replace(config, **{sweep[0]: value})
     except ValueError as error:  # e.g. a step limit that comes before the last party
         parser.error(str(error))
     seeds = range(args.first_seed, args.first_seed + args.seeds)
     folder = args.map if args.scenario == STATIC else f"{args.map}_{args.scenario}"
-    # Any other count gets its own directory, so it never replaces the measurement at the default
-    if args.n_agents != [defaults.n_agents]:
-        folder += "_agents"
+    # A sweep gets its own directory, so it never replaces the measurement at the defaults
+    if sweep is not None:
+        folder += f"_{SWEEPS[sweep[0]].folder}"
     if args.layout is not None:  # `current` too, so the default results stay as they are
         folder += f"_layout_{args.layout}"
     output = args.output or Path("results") / folder
-    write_tables(run_agent_counts(seeds, args.n_agents, config, progress=report), output)
+    if sweep is None:
+        tables = run_experiment(seeds, config, progress=report)
+    else:
+        tables = run_sweep(seeds, *sweep, config, progress=report)
+    write_tables(tables, output)
     print(f"Results written to {output}")
 
 

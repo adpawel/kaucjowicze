@@ -15,6 +15,7 @@ from kaucjowicze.experiments import (
     main,
     run_agent_counts,
     run_experiment,
+    run_sweep,
     write_tables,
 )
 from kaucjowicze.factory import build_simulation
@@ -93,6 +94,9 @@ def test_columns_follow_the_documented_format():
         "J",
         "total_cans",
         "layout",
+        "r",
+        "sweep",
+        "sweep_value",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",
@@ -130,6 +134,7 @@ def test_config_values_are_recorded(tables):
     assert row["scenario"] == "static"
     assert row["n_agents"] == SMALL.n_agents
     assert row["k"] == SMALL.bag_capacity
+    assert row["r"] == SMALL.vision_radius
     assert row["max_steps"] == SMALL.max_steps
     assert row["initial_cans"] == 12
     assert row["total_cans"] == 12
@@ -346,8 +351,21 @@ def test_agent_counts_share_seeds_and_number_runs_on():
     assert labels[-1] == (12, 12, "N = 4, aco/individual, seed 1")
 
 
-def test_one_agent_count_gives_the_plain_experiment():
-    assert run_agent_counts([0, 1], [SMALL.n_agents], SMALL) == run_experiment([0, 1], SMALL)
+def test_one_agent_count_gives_the_plain_experiment_marked_as_a_sweep():
+    swept = run_agent_counts([0, 1], [SMALL.n_agents], SMALL)
+    plain = run_experiment([0, 1], SMALL)
+
+    assert all(row["sweep"] is None and row["sweep_value"] is None for row in plain.runs)
+    assert [(row["sweep"], row["sweep_value"]) for row in swept.runs] == [
+        ("n_agents", SMALL.n_agents)
+    ] * len(plain.runs)
+    unmarked = [{**row, "sweep": None, "sweep_value": None} for row in swept.runs]
+    assert unmarked == plain.runs
+    assert (swept.timeline, swept.agents, swept.events) == (
+        plain.timeline,
+        plain.agents,
+        plain.events,
+    )
 
 
 def test_run_ids_can_start_later():
@@ -413,11 +431,136 @@ def test_current_layout_reproduces_the_default_campus_runs():
     ("arguments", "message"),
     [
         (["--layout", "uniform", "--scenario", "dynamic"], "static"),
-        (["--layout", "uniform", "--n-agents", "5"], "default number of agents"),
+        (["--layout", "uniform", "--n-agents", "5"], "default parameters"),
+        (["--layout", "uniform", "--sweep", "bag_capacity", "5"], "default parameters"),
         (["--layout", "nope"], "invalid choice"),
     ],
 )
 def test_command_line_rejects_layout_combinations(arguments, message, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main([*arguments, "--output", str(tmp_path)])
+    assert exc.value.code != 0
+    assert message in capsys.readouterr().err
+
+
+def test_sweep_changes_only_its_parameter_and_records_it():
+    labels = []
+    tables = run_sweep(
+        seeds=[0, 1],
+        parameter="bag_capacity",
+        values=[2, 5],
+        config=SMALL,
+        progress=lambda done, total, label: labels.append((done, total, label)),
+    )
+
+    assert [row["k"] for row in tables.runs] == [2] * 6 + [5] * 6
+    assert {row["sweep"] for row in tables.runs} == {"bag_capacity"}
+    assert [row["sweep_value"] for row in tables.runs] == [2] * 6 + [5] * 6
+    assert {row["n_agents"] for row in tables.runs} == {SMALL.n_agents}
+    assert labels[0] == (1, 12, "k = 2, random, seed 0")
+    assert labels[-1] == (12, 12, "k = 5, aco/individual, seed 1")
+
+
+def test_sweep_at_the_default_value_reproduces_the_plain_runs():
+    swept = run_sweep([0, 1], "vision_radius", [1, SMALL.vision_radius], SMALL)
+    plain = run_experiment([0, 1], SMALL)
+    at_default = [row for row in swept.runs if row["sweep_value"] == SMALL.vision_radius]
+    ids = {row["run_id"] for row in at_default}
+
+    assert [{**row, "run_id": 0, "sweep": None, "sweep_value": None} for row in at_default] == [
+        {**row, "run_id": 0} for row in plain.runs
+    ]
+    timeline = [{**row, "run_id": 0} for row in swept.timeline if row["run_id"] in ids]
+    assert timeline == [{**row, "run_id": 0} for row in plain.timeline]
+
+
+def test_sweep_of_a_trail_parameter_records_its_value_for_every_variant():
+    tables = run_sweep([0], "evaporation_rate", [0.01, 0.05], SMALL)
+    assert [row["sweep_value"] for row in tables.runs] == [0.01] * 3 + [0.05] * 3
+    assert [row["rho"] for row in tables.runs] == [None, 0.01, None, None, 0.05, None]
+
+
+def test_sweep_rejects_an_unknown_parameter():
+    with pytest.raises(ValueError, match="Unknown sweep"):
+        run_sweep([0], "max_steps", [5], SMALL)
+
+
+def test_sweep_gets_its_own_default_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    main(["--seeds", "1", "--max-steps", "2", "--sweep", "bag_capacity", "2", "40"])
+    runs = _read(tmp_path / "results" / "test_bag" / "runs.csv")
+    assert [row["k"] for row in runs] == ["2"] * 3 + ["40"] * 3
+    assert {row["sweep"] for row in runs} == {"bag_capacity"}
+    assert not (tmp_path / "results" / "test").exists()
+
+
+def test_sweep_of_agents_is_the_same_as_n_agents(tmp_path):
+    main(
+        [
+            "--seeds",
+            "1",
+            "--max-steps",
+            "2",
+            "--n-agents",
+            "1",
+            "3",
+            "--output",
+            str(tmp_path / "a"),
+        ]
+    )
+    main(
+        [
+            "--seeds",
+            "1",
+            "--max-steps",
+            "2",
+            "--sweep",
+            "n_agents",
+            "1",
+            "3",
+            "--output",
+            str(tmp_path / "b"),
+        ]
+    )
+    for name in ("runs.csv", "timeline.csv", "agents.csv"):
+        assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes()
+
+
+def test_sweep_of_a_rate_takes_fractions(tmp_path):
+    main(
+        [
+            "--seeds",
+            "1",
+            "--max-steps",
+            "2",
+            "--sweep",
+            "exploration_rate",
+            "0",
+            "0.3",
+            "--output",
+            str(tmp_path),
+        ]
+    )
+    runs = _read(tmp_path / "runs.csv")
+    assert [row["sweep_value"] for row in runs] == ["0.0"] * 3 + ["0.3"] * 3
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--sweep", "bag_capacity"], "then its values"),
+        (["--sweep", "2", "5"], "then its values"),
+        (["--sweep", "nope", "2"], "not a parameter"),
+        (["--sweep", "bag_capacity", "2", "vision_radius", "1"], "then its values"),
+        (["--sweep", "bag_capacity", "2.5"], "whole numbers"),
+        (["--sweep", "bag_capacity", "2", "2"], "repeat"),
+        (["--sweep", "bag_capacity", "0"], "Bag capacity"),
+        (["--sweep", "exploration_rate", "1.5"], "Exploration rate"),
+        (["--sweep", "n_agents", "0"], "positive"),
+        (["--sweep", "bag_capacity", "2", "--n-agents", "5"], "cannot be combined"),
+    ],
+)
+def test_command_line_rejects_invalid_sweeps(arguments, message, tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main([*arguments, "--output", str(tmp_path)])
     assert exc.value.code != 0

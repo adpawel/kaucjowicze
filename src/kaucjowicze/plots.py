@@ -1,9 +1,10 @@
-"""Figures and summary tables of comparisons P1, P2, P4, P5 and P6, made from experiment CSVs.
+"""Figures and summary tables of comparisons P1, P2 and P4 to P9, made from experiment CSVs.
 
-P4 compares how fast the variants take up the cans of parties in the dynamic scenario. P5 runs
-the variants with several numbers of agents and replaces the other comparisons, which would
-otherwise mix runs of different sizes. P6 does the same for the can layouts, whose runs lie in
-one directory per layout and are read together (several `--input` directories).
+P4 compares how fast the variants take up the cans of parties in the dynamic scenario. P5 and
+P7 to P9 are sweeps: the variants run with several values of one parameter (number of agents,
+bag capacity, vision radius, trail parameters), and their report replaces the other comparisons,
+which would otherwise mix runs of different settings. P6 does the same for the can layouts, whose
+runs lie in one directory per layout and are read together (several `--input` directories).
 
 `python -m kaucjowicze.plots` needs the optional `analysis` dependencies.
 """
@@ -19,6 +20,7 @@ from matplotlib.figure import Figure
 from scipy import stats
 
 from kaucjowicze.config import LAYOUTS
+from kaucjowicze.experiments import SWEEPS
 
 CONFIDENCE = 0.95
 
@@ -44,8 +46,19 @@ TESTED_PAIRS = (
     (ACO_SHARED, ACO_INDIVIDUAL),
     (ACO_INDIVIDUAL, RANDOM),
 )
-# P5 tests only this pair, once per number of agents, as decided before the measurement
+# P5 tests only this pair, once per number of agents, as decided before the measurement;
+# the other sweeps (P7 to P9) test the same pair once per value
 P5_PAIR = (ACO_SHARED, RANDOM)
+SWEEP_TITLES = {
+    "n_agents": ("P5", "Number of agents"),
+    "bag_capacity": ("P7", "Bag capacity"),
+    "vision_radius": ("P8", "Vision radius"),
+    "evaporation_rate": ("P9", "Evaporation rate"),
+    "pheromone_alpha": ("P9", "Trail weight exponent"),
+    "exploration_rate": ("P9", "Exploration rate"),
+}
+# P5 was planned with the unpaired test of P1 and P2; the later sweeps, like P6, pair by seed
+UNPAIRED_SWEEPS = ("n_agents",)
 # P6 tests the same pair, t_90 and Gini once per layout, paired by seed (decided before it ran)
 P6_METRICS = ("t_90", "gini")
 # Runs written without `--layout` have the counts of their map and scenario
@@ -252,27 +265,61 @@ def party_significance(results: Results) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["metric", "variant_a", "variant_b", "p_value"])
 
 
-def has_agent_sweep(results: Results) -> bool:
-    """Whether the runs come with more than one number of agents (comparison P5)."""
-    return results.runs["n_agents"].nunique() > 1
+def sweep_parameter(runs: pd.DataFrame) -> str | None:
+    """The parameter the runs sweep, or `None` without a sweep.
 
-
-def agent_sweep_table(runs: pd.DataFrame) -> pd.DataFrame:
-    """One row per number of agents and variant.
-
-    `work` is N · t_90, the agent-steps spent until 90% of the cans are delivered: if it grows
-    with N, each extra agent adds less than the ones before.
+    Runs of `run_sweep` name it in `sweep`. Files written before that column existed hold only
+    sweeps of the number of agents, recognised by more than one value of it.
     """
+    if "sweep" in runs and runs["sweep"].notna().any():
+        names = runs["sweep"].dropna().unique()
+        if len(names) > 1 or runs["sweep"].isna().any():
+            raise ValueError("The runs mix several sweeps, or a sweep with plain runs")
+        return str(names[0])
+    if runs["n_agents"].nunique() > 1:
+        return "n_agents"
+    return None
+
+
+def has_sweep(results: Results) -> bool:
+    """Whether the runs vary one parameter over several values (comparisons P5, P7 to P9)."""
+    return sweep_parameter(results.runs) is not None
+
+
+def with_sweep_value(runs: pd.DataFrame) -> pd.DataFrame:
+    """Runs with a `value` column: the value of the swept parameter in each run."""
+    parameter = sweep_parameter(runs) or "n_agents"  # one value is not a sweep, but has one
+    if "sweep_value" in runs and runs["sweep_value"].notna().all():
+        value = runs["sweep_value"]
+    else:  # a sweep of agents written before `sweep_value` existed
+        value = runs[parameter]
+    return runs.assign(value=value)
+
+
+def _plain(value) -> int | float:
+    """A whole number as `int`, so tables show 10 rather than 10.0."""
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def sweep_table(runs: pd.DataFrame) -> pd.DataFrame:
+    """One row per value of the swept parameter and variant.
+
+    For the number of agents `work` is N · t_90, the agent-steps spent until 90% of the cans are
+    delivered: if it grows with N, each extra agent adds less than the ones before. It means
+    nothing for the other parameters, so they have no `work` columns.
+    """
+    parameter = sweep_parameter(runs)
+    runs = with_sweep_value(runs)
     rows = []
-    for n_agents in sorted(runs["n_agents"].unique()):
-        same_n = runs[runs["n_agents"] == n_agents]
-        for variant in _present(same_n, VARIANT_ORDER):
-            group = same_n[same_n["variant"] == variant]
+    for value in _sweep_values(runs, "value"):
+        same = runs[runs["value"] == value]
+        for variant in _present(same, VARIANT_ORDER):
+            group = same[same["variant"] == variant]
             t_90 = censored(group, "t_90")
-            row: dict[str, object] = {"n_agents": int(n_agents), "variant": variant}
-            row["runs"] = len(group)
+            row: dict[str, object] = {"value": value, "variant": variant, "runs": len(group)}
             row["t_90_mean"], row["t_90_ci"] = mean_ci(t_90)
-            row["work_mean"], row["work_ci"] = mean_ci(t_90 * n_agents)
+            if parameter == "n_agents":
+                row["work_mean"], row["work_ci"] = mean_ci(t_90 * value)
             row["gini_mean"], row["gini_ci"] = mean_ci(group["gini"])
             row["t_90_reached"] = int(group["t_90"].notna().sum())
             rows.append(row)
@@ -292,10 +339,13 @@ def paired_by_seed(runs: pd.DataFrame, column: str, variants: Sequence[str]) -> 
     return pd.concat(by_seed, axis=1, join="inner")
 
 
-def aco_advantage(runs: pd.DataFrame, by: str = "n_agents") -> pd.DataFrame:
-    """Per value of `by` (number of agents or layout): mean t_90 of the random walk over that of
-    ACO N1, and on how many seeds ACO N1 is faster. Both use only the seeds both variants ran on.
+def aco_advantage(runs: pd.DataFrame, by: str = "value") -> pd.DataFrame:
+    """Per value of `by` (of the swept parameter or layout): mean t_90 of the random walk over
+    that of ACO N1, and on how many seeds ACO N1 is faster. Both use only the seeds both variants
+    ran on.
     """
+    if by == "value":
+        runs = with_sweep_value(runs)
     faster, slower = P5_PAIR
     rows = []
     for value in _sweep_values(runs, by):
@@ -317,24 +367,35 @@ def _sweep_values(runs: pd.DataFrame, by: str) -> list:
     """Values of `by` in order: layouts from the most clustered, numbers ascending."""
     if by == "layout":
         return layout_order(runs)
-    return [int(value) for value in sorted(runs[by].unique())]
+    return [_plain(value) for value in sorted(runs[by].unique())]
 
 
-def agent_sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
-    """Two-sided Mann-Whitney test of t_90, ACO N1 vs random walk, for each number of agents,
+def sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
+    """Two-sided test of t_90, ACO N1 vs random walk, for each value of the swept parameter,
     with the Bonferroni threshold over those tests.
+
+    The number of agents (P5) keeps the Mann-Whitney test it was planned with; the other sweeps
+    use the Wilcoxon signed-rank test paired by seed, as P6. `pairs` is `None` for Mann-Whitney.
     """
+    parameter = sweep_parameter(runs)
+    runs = with_sweep_value(runs)
     variant_a, variant_b = P5_PAIR
     rows = []
-    for n_agents in sorted(runs["n_agents"].unique()):
-        same_n = runs[runs["n_agents"] == n_agents]
-        a = same_n[same_n["variant"] == variant_a]
-        b = same_n[same_n["variant"] == variant_b]
+    for value in _sweep_values(runs, "value"):
+        same = runs[runs["value"] == value]
+        a = same[same["variant"] == variant_a]
+        b = same[same["variant"] == variant_b]
         if a.empty or b.empty:
             continue
-        p_value = _mann_whitney_p(censored(a, "t_90"), censored(b, "t_90"))
-        rows.append({"n_agents": int(n_agents), "p_value": p_value})
-    table = pd.DataFrame(rows, columns=["n_agents", "p_value"])
+        if parameter in UNPAIRED_SWEEPS:
+            p_value = _mann_whitney_p(censored(a, "t_90"), censored(b, "t_90"))
+            pairs = None
+        else:
+            paired = paired_by_seed(same, "t_90", P5_PAIR)
+            p_value = _wilcoxon_p(paired[variant_a], paired[variant_b])
+            pairs = len(paired)
+        rows.append({"value": value, "pairs": pairs, "p_value": p_value})
+    table = pd.DataFrame(rows, columns=["value", "pairs", "p_value"])
     table["threshold"] = SIGNIFICANCE_LEVEL / max(len(table), 1)
     table["significant"] = table["p_value"] < table["threshold"]
     return table
@@ -490,43 +551,46 @@ def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path
     figure.savefig(path, dpi=150)
 
 
-def _agent_axis(axes, counts: Sequence[int]) -> None:
-    axes.set_xscale("log", base=2)
-    axes.set_xticks(counts, [str(count) for count in counts])
+def _sweep_axis(axes, values: Sequence[float]) -> None:
+    """Doubling values (agents, radius) spread evenly on a log axis; a zero needs a linear one."""
+    if min(values) > 0:
+        axes.set_xscale("log", base=2)
+    axes.set_xticks(values, [f"{value:g}" for value in values])
     axes.minorticks_off()
 
 
-def plot_against_agents(
-    runs: pd.DataFrame, column: str, title: str, ylabel: str, path: Path
-) -> None:
-    """Mean of `column` from `agent_sweep_table` for each variant, with its 95% band."""
-    table = agent_sweep_table(runs)
+def _sweep_xlabel(parameter: str) -> str:
+    return f"{SWEEP_TITLES[parameter][1]} {SWEEPS[parameter].symbol}"
+
+
+def plot_sweep(runs: pd.DataFrame, column: str, title: str, ylabel: str, path: Path) -> None:
+    """Mean of `column` from `sweep_table` for each variant, with its 95% band."""
+    table = sweep_table(runs)
     figure = Figure(figsize=(8, 4.5), layout="constrained")
-    axes = _style_axes(figure, title, "Number of agents N", ylabel)
+    axes = _style_axes(figure, title, _sweep_xlabel(sweep_parameter(runs)), ylabel)
     for variant in _present(table, VARIANT_ORDER):
         rows = table[table["variant"] == variant]
         mean, half_width = rows[f"{column}_mean"], rows[f"{column}_ci"].fillna(0)
         color = COLORS[variant]
         axes.fill_between(
-            rows["n_agents"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
+            rows["value"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
         )
-        axes.plot(
-            rows["n_agents"], mean, color=color, linewidth=2, marker="o", label=LABELS[variant]
-        )
-    _agent_axis(axes, sorted(table["n_agents"].unique()))
+        axes.plot(rows["value"], mean, color=color, linewidth=2, marker="o", label=LABELS[variant])
+    _sweep_axis(axes, sorted(table["value"].unique()))
     axes.set_ylim(bottom=0)
     axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
     figure.savefig(path, dpi=150)
 
 
 def plot_aco_advantage(runs: pd.DataFrame, title: str, path: Path) -> None:
-    """How many times faster ACO N1 reaches 90% than the random walk, per number of agents."""
+    """How many times faster ACO N1 reaches 90% than the random walk, per value of the sweep."""
     table = aco_advantage(runs)
     figure = Figure(figsize=(8, 4.5), layout="constrained")
-    axes = _style_axes(figure, title, "Number of agents N", "t_90 random walk / t_90 ACO N1")
+    xlabel = _sweep_xlabel(sweep_parameter(runs))
+    axes = _style_axes(figure, title, xlabel, "t_90 random walk / t_90 ACO N1")
     axes.axhline(1, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
-    axes.plot(table["n_agents"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
-    _agent_axis(axes, table["n_agents"].tolist())
+    axes.plot(table["value"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
+    _sweep_axis(axes, table["value"].tolist())
     axes.set_ylim(bottom=0)
     figure.savefig(path, dpi=150)
 
@@ -677,45 +741,55 @@ def format_party_summary(results: Results) -> str:
     )
 
 
-def format_agent_summary(runs: pd.DataFrame) -> str:
-    """P5 tables as Markdown."""
-    table = _markdown_table(
-        ("N", "Variant", "t_90", "Agent-steps N · t_90", "Gini", "Reached 90%"),
-        (
-            (
-                row.n_agents,
-                row.variant,
-                _with_ci(row.t_90_mean, row.t_90_ci, 0),
-                _with_ci(row.work_mean, row.work_ci, 0),
-                _with_ci(row.gini_mean, row.gini_ci, 3),
-                f"{row.t_90_reached}/{row.runs}",
-            )
-            # itertuples keeps the integer columns integers, iterrows can make them floats
-            for row in agent_sweep_table(runs).itertuples()
-        ),
-    )
+def format_sweep_summary(runs: pd.DataFrame) -> str:
+    """Tables of a sweep (P5, P7 to P9) as Markdown."""
+    parameter = sweep_parameter(runs)
+    comparison, name = SWEEP_TITLES[parameter]
+    symbol = SWEEPS[parameter].symbol
+    with_work = parameter == "n_agents"
+    header = [symbol, "Variant", "t_90"]
+    if with_work:
+        header.append("Agent-steps N · t_90")
+    header += ["Gini", "Reached 90%"]
+
+    def row_cells(row) -> list:
+        cells = [row.value, row.variant, _with_ci(row.t_90_mean, row.t_90_ci, 0)]
+        if with_work:
+            cells.append(_with_ci(row.work_mean, row.work_ci, 0))
+        return [*cells, _with_ci(row.gini_mean, row.gini_ci, 3), f"{row.t_90_reached}/{row.runs}"]
+
+    # itertuples keeps the integer columns integers, iterrows can make them floats
+    table = _markdown_table(header, (row_cells(row) for row in sweep_table(runs).itertuples()))
     advantage = _markdown_table(
-        ("N", "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
+        (symbol, "t_90 random / t_90 ACO N1", "ACO N1 faster on"),
         (
-            (row.n_agents, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
+            (row.value, f"{row.ratio:.2f}", f"{row.aco_faster}/{row.seeds}")
             for row in aco_advantage(runs).itertuples()
         ),
     )
+    tests = sweep_significance(runs)
+    paired = parameter not in UNPAIRED_SWEEPS
     significance = _markdown_table(
-        ("N", "p-value", "Bonferroni threshold", "Significant"),
+        (symbol, *(("Pairs",) if paired else ()), "p-value", "Bonferroni threshold", "Significant"),
         (
             (
-                row.n_agents,
+                row.value,
+                *((row.pairs,) if paired else ()),
                 f"{row.p_value:.3g}",
                 f"{row.threshold:.3g}",
                 "yes" if row.significant else "no",
             )
-            for row in agent_sweep_significance(runs).itertuples()
+            for row in tests.itertuples()
         ),
     )
     variant_a, variant_b = P5_PAIR
+    test = (
+        "Two-sided Wilcoxon signed-rank test of t_90 paired by seed"
+        if paired
+        else "Two-sided Mann-Whitney test of t_90"
+    )
     return (
-        "# Number of agents (P5)\n\n"
+        f"# {name} ({comparison})\n\n"
         f"Map: {map_label(runs)}. Scenario: {scenario_label(runs)}.\n\n"
         "Mean ± 95% confidence interval. A run below 90% counts as the step limit T.\n\n"
         f"{table}\n\n"
@@ -723,7 +797,7 @@ def format_agent_summary(runs: pd.DataFrame) -> str:
         "Ratio of the mean t_90 values over the seeds both variants ran on.\n\n"
         f"{advantage}\n\n"
         "## Significance\n\n"
-        f"Two-sided Mann-Whitney test of t_90, {variant_a} vs {variant_b}, one test per N, "
+        f"{test}, {variant_a} vs {variant_b}, one test per {symbol}, "
         "Bonferroni correction over those tests.\n\n"
         f"{significance}\n"
     )
@@ -786,13 +860,13 @@ def format_layout_summary(runs: pd.DataFrame) -> str:
 def report_text(results: Results) -> str:
     """Everything `summary.md` holds: P1 and P2 tables, and P4 in a run with parties.
 
-    Runs with several numbers of agents get only the P5 tables, and with several layouts only
-    the P6 tables.
+    Runs of a sweep get only its tables (P5, P7 to P9), and with several layouts only the P6
+    tables.
     """
     if has_layout_sweep(results):
         return format_layout_summary(results.runs)
-    if has_agent_sweep(results):
-        return format_agent_summary(results.runs)
+    if has_sweep(results):
+        return format_sweep_summary(results.runs)
     text = format_summary(results.runs)
     if has_parties(results):
         text += "\n" + format_party_summary(results)
@@ -855,9 +929,9 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     if has_layout_sweep(results):
         written += _write_layout_figures(with_layout(results.runs), label, output)
         available = set()  # P1, P2 and P4 would mix layouts
-    elif has_agent_sweep(results):
-        written += _write_agent_figures(results.runs, label, output)
-        available = set()  # P1, P2 and P4 would mix runs of different sizes
+    elif has_sweep(results):
+        written += _write_sweep_figures(results.runs, label, output)
+        available = set()  # P1, P2 and P4 would mix runs of different settings
     else:
         available = set(results.runs["variant"])
     if available.issuperset(P1_VARIANTS):
@@ -886,16 +960,32 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
     return written
 
 
-def _write_agent_figures(runs: pd.DataFrame, label: str, output: Path) -> list[Path]:
-    paths = [output / f"p5_{name}.png" for name in ("t90_vs_agents", "work_vs_agents")]
-    title = f"P5: time to 90% of the cans ({label})"
-    plot_against_agents(runs, "t_90", title, "t_90 [steps]", paths[0])
-    title = f"P5: agent-steps to 90% of the cans ({label})"
-    plot_against_agents(runs, "work", title, "N · t_90", paths[1])
+def _write_sweep_figures(runs: pd.DataFrame, label: str, output: Path) -> list[Path]:
+    """P5 keeps its file names; the other sweeps are named after their comparison and parameter."""
+    parameter = sweep_parameter(runs)
+    comparison, name = SWEEP_TITLES[parameter]
+    if parameter == "n_agents":
+        prefix, suffix = "p5", "agents"
+    else:
+        folder = SWEEPS[parameter].folder
+        prefix = comparison.lower() if comparison != "P9" else f"p9_{folder}"
+        suffix = folder
+    symbol = SWEEPS[parameter].symbol
+    paths = [output / f"{prefix}_t90_vs_{suffix}.png"]
+    title = f"{comparison}: time to 90% of the cans by {symbol} ({label})"
+    plot_sweep(runs, "t_90", title, "t_90 [steps]", paths[0])
+    if parameter == "n_agents":
+        paths.append(output / "p5_work_vs_agents.png")
+        title = f"P5: agent-steps to 90% of the cans ({label})"
+        plot_sweep(runs, "work", title, "N · t_90", paths[-1])
+    else:
+        paths.append(output / f"{prefix}_gini_vs_{suffix}.png")
+        title = f"{comparison}: inequality of cans per agent by {symbol} ({label})"
+        plot_sweep(runs, "gini", title, "Gini", paths[-1])
     if set(runs["variant"]).issuperset(P5_PAIR):
-        path = output / "p5_aco_advantage.png"
-        plot_aco_advantage(runs, f"P5: how many times faster ACO N1 is ({label})", path)
-        paths.append(path)
+        paths.append(output / f"{prefix}_aco_advantage.png")
+        title = f"{comparison}: how many times faster ACO N1 is ({label})"
+        plot_aco_advantage(runs, title, paths[-1])
     return paths
 
 
