@@ -720,3 +720,26 @@ Test Wilcoxona dla par, we wszystkich testach 30 par.
 | Przewaga około 3 razy | **zależy:** od 6.2 przy k = 2 do 1.2 przy k = 40 | prawie nie zależy: 2.8–3.4 |
 | N1 i N2 są równie szybkie | przy k ≥ 5 tak, przy k = 2 N1 średnio szybsze (bez testu) | przy r ≥ 2 tak, przy r = 1 N1 średnio szybsze (bez testu) |
 | N2 dzieli puszki najmniej równo | kierunek utrzymuje się przy każdym k (opisowo) | kierunek utrzymuje się przy każdym r (opisowo) |
+
+## 19. Parametry śladu ρ, α i ε (P9)
+
+**Pytanie:** czy wartości domyślne parametrów śladu, wzięte z `MILESTONES.md` i nigdy nie strojone na Miasteczku (punkt 13), są rozsądne. Pomiar kontrolny z punktu 7 (mapa testowa, bez testu) nie odróżniał wariantów ρ i ε. Ta część analizy wrażliwości była opcjonalna i powstała dopiero po opisaniu k i r (punkt 18).
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór | Uzasadnienie |
+|---|---|---|
+| ρ | 0.005, 0.01, 0.02, 0.05 | Wokół wartości domyślnej 0.02. Okres połowicznego zaniku od około 138 do 14 kroków |
+| α | 0.5, 1, 2, 4 | Wokół wartości domyślnej 1. Przy α = 0.5 ślad tylko sugeruje kierunek, a przy α = 4 prawie go wyznacza |
+| ε | 0, 0.05, 0.1, 0.3 | Wokół wartości domyślnej 0.1. ε = 0 to brak odchodzenia od śladu |
+| Pozostałe parametry | jak w punkcie 18: Miasteczko, scenariusz statyczny, wartości domyślne, ziarna 200–229, T = 20000 | Zmienia się jeden parametr naraz |
+| Warianty | wszystkie trzy, ale ρ, α i ε zmieniają tylko ACO N1 | Losowy spacer i N2 są stałym punktem odniesienia. Ich przebiegi muszą być identyczne przy każdej wartości (kontrola) |
+| Testy | ACO N1 przy każdej innej wartości / ACO N1 przy wartości domyślnej, t₉₀, test Wilcoxona dla par (to samo ziarno), Bonferroni osobno dla każdego parametru na 3 testy (próg 0.05 / 3 ≈ 0.0167) | Pytanie dotyczy N1, więc porównujemy N1 z samym sobą. Przewagę nad losowym spacerem podajemy opisowo |
+
+**Hipotezy:**
+
+1. **ρ:** t₉₀ ACO N1 jest najniższe przy wartości domyślnej lub sąsiedniej. Przy ρ = 0.005 N1 jest istotnie wolniejsze, bo ślad długo prowadzi do skupisk, które już się wyczerpały. Przy ρ = 0.01 i 0.05 różnica nie jest istotna.
+2. **α:** przy α = 0.5 N1 jest istotnie wolniejsze, bo słaby ślad częściej przegrywa z losowym ruchem. Przy α = 2 i 4 różnica nie jest istotna, bo już przy α = 1 ślad o sile 1 dostaje 94% wagi (punkt 4).
+3. **ε:** żadna różnica nie jest istotna. ε działa tylko na komórkach ze śladem (punkt 5), a ślad i tak zanika, gdy skupisko się wyczerpie.
+
+**Zastrzeżenie:** ρ zmienia też to, jak długo ślad przeżywa drogę. Przy ρ = 0.05 ślad o sile 5 spada do τ₀ po około 104 krokach, a najdalsza komórka Miasteczka jest 80 kroków od bazy, więc ślad do dalekiego skupiska może zniknąć, zanim ktoś za nim pójdzie.
