@@ -91,3 +91,5 @@ CI runs the same checks on every pull request and push to `master`.
 - [`MILESTONES.md`](MILESTONES.md): assumptions and milestones
 - [`ALGORITHM.md`](ALGORITHM.md): formulas, decisions and results
 - [`NAGRODY.md`](NAGRODY.md): open problems with rewards and proposed trail variants
+- [`docs/aiin_dokumentacja_final.docx`](docs/aiin_dokumentacja_final.docx): final documentation for the lecturer (P1–P11)
+- [`docs/aiin_prezentacja_final.pptx`](docs/aiin_prezentacja_final.pptx): final presentation, in the style of the class 3 deck
