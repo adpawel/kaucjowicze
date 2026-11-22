@@ -27,3 +27,4 @@ class Agent:
     remembered_cans: int = 0  # cans the agent last saw left at the remembered source
     trip_steps: int = 0  # steps since the agent last left a base
     trip_length: int = 0  # L: steps of the whole trip, known once the return starts
+    egoist: bool = False  # mixed population: lays no trail and keeps a private memory

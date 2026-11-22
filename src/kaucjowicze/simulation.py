@@ -69,10 +69,12 @@ class Simulation:
         rng: np.random.Generator,
         pheromone: np.ndarray | None = None,
         events: Sequence[SpawnEvent] = (),
+        egoists: int = 0,
     ) -> None:
         """`pheromone` is an array [y, x] updated in place; `None` means no trails are left.
 
         `events` are parties: their cans appear once `step_count` reaches their step.
+        The first `egoists` agents are egoists of a mixed population and lay no trail.
         """
         if not grid.bases:
             raise ValueError("Grid must have at least one base")
@@ -85,8 +87,11 @@ class Simulation:
         self.policy = policy
         self.rng = rng
         self.distance = distance_map(grid)  # computed once: the map does not change
+        if not 0 <= egoists <= config.n_agents:
+            raise ValueError("Egoists must be between none and all of the agents")
         self.agents = [
-            Agent(id=i, pos=grid.bases[i % len(grid.bases)]) for i in range(config.n_agents)
+            Agent(id=i, pos=grid.bases[i % len(grid.bases)], egoist=i < egoists)
+            for i in range(config.n_agents)
         ]
         self.initial_cans = grid.total_cans
         self.collected = 0
@@ -208,7 +213,7 @@ class Simulation:
 
     def _lay_trail(self, agent: Agent) -> None:
         """Mark the cell being left, so the trail reaches the source and spares the base."""
-        if self.pheromone is not None:
+        if self.pheromone is not None and not agent.egoist:
             x, y = agent.pos
             mean_cans = self._mean_delivered() if self.config.trail_signal == EQUAL else 0.0
             amount = trail_amount(agent, self.config, mean_cans)

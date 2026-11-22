@@ -48,6 +48,7 @@ SWEEPS = {
     "evaporation_rate": Sweep(float, "rho", "rho"),
     "pheromone_alpha": Sweep(float, "alpha", "alpha"),
     "exploration_rate": Sweep(float, "eps", "eps"),
+    "egoist_share": Sweep(float, "egoists", "mixed"),
 }
 
 VARIANTS: tuple[Variant, ...] = (("random", None), ("aco", SHARED), ("aco", INDIVIDUAL))
@@ -89,6 +90,7 @@ RUNS_COLUMNS = (
     "sweep",
     "sweep_value",
     "trail",
+    "egoists",
 )
 TIMELINE_COLUMNS = (
     "run_id",
@@ -98,7 +100,7 @@ TIMELINE_COLUMNS = (
     "agents_searching",
     "agents_carrying",
 )
-AGENTS_COLUMNS = ("run_id", "agent_id", "cans", "path_length", "trips")
+AGENTS_COLUMNS = ("run_id", "agent_id", "cans", "path_length", "trips", "egoist")
 EVENTS_COLUMNS = (
     "run_id",
     "event_id",
@@ -176,6 +178,7 @@ def _run_row(
         "sweep": None,  # filled in by `run_sweep`
         "sweep_value": None,
         "trail": trail_name(config) if follows_trails else None,
+        "egoists": config.n_egoists if follows_trails else None,
     }
 
 
@@ -226,6 +229,7 @@ def run_experiment(
                 "cans": agent.cans,
                 "path_length": agent.path_length,
                 "trips": agent.trips,
+                "egoist": int(agent.egoist),
             }
             for agent in record.agents
         )

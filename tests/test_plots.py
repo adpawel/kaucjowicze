@@ -786,3 +786,58 @@ def test_each_signal_is_tested_on_its_own_measure_with_bonferroni():
     best = best_by_weight(_runs(rows))
     assert best.set_index("w1").loc[1.0, "variant"] == "aco/shared/speed"
     assert best.set_index("w1").loc[0.0, "variant"] == "aco/shared/equal+"
+
+
+def test_mixed_earnings_pair_egoists_and_cooperators_of_one_run():
+    from kaucjowicze.plots import mixed_earnings, mixed_earnings_table, mixed_significance
+
+    runs, agents = [], []
+    for s in range(8):
+        for share in (0.0, 0.5):
+            run_id = len(runs)
+            runs.append(
+                {
+                    "run_id": run_id,
+                    "variant": "aco/shared",
+                    "seed": s,
+                    "n_agents": 4,
+                    "sweep": "egoist_share",
+                    "sweep_value": share,
+                    "t_90": 40.0 + s if share else 20.0 + s,
+                }
+            )
+            for agent_id in range(4):
+                egoist = int(agent_id < 4 * share)
+                cans = 9 + s if egoist else 3
+                agents.append(
+                    {"run_id": run_id, "agent_id": agent_id, "cans": cans, "egoist": egoist}
+                )
+    results = Results(_runs(runs), pd.DataFrame(), pd.DataFrame(agents))
+
+    per_run = mixed_earnings(results)
+    assert per_run["value"].tolist() == [0.5] * 8  # a run without egoists has nothing to pair
+    assert per_run["egoist"].tolist() == [9.0 + s for s in range(8)]
+    row = mixed_earnings_table(results).iloc[0]
+    assert (row["egoists_ahead"], row["runs"]) == (8, 8)
+
+    tests = mixed_significance(results)
+    assert list(zip(tests["test"], tests["value"], strict=True)) == [
+        ("earnings", 0.5),
+        ("t_90", 0.5),
+    ]
+    assert tests["p_value"].tolist() == pytest.approx([2 / 2**8] * 2)
+    assert tests["threshold"].tolist() == pytest.approx([0.05 / 7] * 2)
+
+
+def test_mixed_population_report(tmp_path):
+    config = SimulationConfig(
+        width=30, height=20, n_clusters=2, cans_per_cluster=5, n_agents=4, max_steps=150
+    )
+    write_tables(run_sweep([0, 1, 2], "egoist_share", [0.0, 0.5, 1.0], config), tmp_path)
+    results = load_results(tmp_path)
+    names = {path.name for path in write_report(results, tmp_path / "figures")}
+    assert {"p10_t90_vs_mixed.png", "p10_earnings.png", "summary.md"} <= names
+    summary = report_text(results)
+    assert summary.startswith("# Share of egoists (P10)")
+    assert "## Earnings of egoists and cooperators" in summary
+    assert summary.count("## Significance") == 1

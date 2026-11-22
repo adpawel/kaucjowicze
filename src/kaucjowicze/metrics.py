@@ -67,6 +67,7 @@ class AgentRecord:
     cans: int
     path_length: int
     trips: int
+    egoist: bool = False
 
 
 @dataclass(frozen=True)
@@ -203,7 +204,7 @@ def record_run(sim: Simulation) -> RunRecord:
         sim.step()
         timeline.append(_snapshot(sim))
     agents = [
-        AgentRecord(agent.id, agent.cans_collected, agent.path_length, agent.trips)
+        AgentRecord(agent.id, agent.cans_collected, agent.path_length, agent.trips, agent.egoist)
         for agent in sim.agents
     ]
     events = [_event_record(log) for log in sim.event_logs if log.event.step <= sim.step_count]

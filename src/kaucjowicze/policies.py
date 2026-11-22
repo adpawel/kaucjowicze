@@ -5,6 +5,7 @@ trails are handled by the simulation.
 """
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Protocol
 
 import numpy as np
@@ -70,8 +71,9 @@ class IndividualPolicy:
     agent explores like the random walk.
     """
 
-    def __init__(self, config: SimulationConfig) -> None:
-        self._explorer = RandomWalkPolicy(config.direction_persistence)
+    def __init__(self, config: SimulationConfig, explorer: MovementPolicy | None = None) -> None:
+        """`explorer` moves an agent that remembers nothing; by default the random walk."""
+        self._explorer = explorer or RandomWalkPolicy(config.direction_persistence)
         self._routes: dict[Position, np.ndarray] = {}  # distance maps of visited sources
 
     def choose_move(
@@ -85,7 +87,7 @@ class IndividualPolicy:
             agent.remembered_source = None
             agent.remembered_cans = 0
         if agent.remembered_source is None:
-            return self._explorer.choose_move(agent, grid, rng)
+            return self._explorer.choose_move(agent, grid, rng, agents)
         return step_closer(grid, self._route_to(grid, agent.remembered_source), agent.pos)
 
     def _route_to(self, grid: Grid, source: Position) -> np.ndarray:
@@ -183,3 +185,31 @@ class AcoPolicy:
             other.state is AgentState.SEARCHING and other.pos in region for other in agents
         )
         return searching > cans
+
+
+class MixedPolicy:
+    """Mixed population (comparison P10): cooperators of N1 and egoists in one colony.
+
+    A cooperator moves as in N1. An egoist (`agent.egoist`) moves as in N2, returning to its
+    privately remembered source, but with nothing remembered it follows the trails of the others
+    instead of walking at random, and like N2 it ignores crowds. The simulation lets only the
+    cooperators lay trails. With no egoist this is N1; with no cooperator there is never a trail,
+    so the egoists explore exactly like N2.
+    """
+
+    def __init__(
+        self, config: SimulationConfig, pheromone: np.ndarray, distance: np.ndarray
+    ) -> None:
+        self._cooperator = AcoPolicy(config, pheromone, distance)
+        free_rider = AcoPolicy(replace(config, crowd_penalty=1.0), pheromone, distance)
+        self._egoist = IndividualPolicy(config, explorer=free_rider)
+
+    def choose_move(
+        self,
+        agent: Agent,
+        grid: Grid,
+        rng: np.random.Generator,
+        agents: Sequence[Agent] = (),
+    ) -> Position:
+        policy = self._egoist if agent.egoist else self._cooperator
+        return policy.choose_move(agent, grid, rng, agents)
