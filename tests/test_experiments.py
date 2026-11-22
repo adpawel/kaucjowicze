@@ -99,6 +99,8 @@ def test_columns_follow_the_documented_format():
         "sweep",
         "sweep_value",
         "trail",
+        "egoists",
+        "tau_max",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",
@@ -108,7 +110,7 @@ def test_columns_follow_the_documented_format():
         "agents_searching",
         "agents_carrying",
     )
-    assert AGENTS_COLUMNS == ("run_id", "agent_id", "cans", "path_length", "trips")
+    assert AGENTS_COLUMNS == ("run_id", "agent_id", "cans", "path_length", "trips", "egoist")
     assert EVENTS_COLUMNS == (
         "run_id",
         "event_id",

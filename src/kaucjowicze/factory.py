@@ -8,7 +8,7 @@ from kaucjowicze.cans import scatter_cans, schedule_events
 from kaucjowicze.config import SimulationConfig
 from kaucjowicze.maps import build_map
 from kaucjowicze.pathfinding import distance_map
-from kaucjowicze.policies import AcoPolicy, IndividualPolicy, RandomWalkPolicy
+from kaucjowicze.policies import AcoPolicy, IndividualPolicy, MixedPolicy, RandomWalkPolicy
 from kaucjowicze.rewards import INDIVIDUAL, SHARED
 from kaucjowicze.simulation import Simulation
 
@@ -24,6 +24,7 @@ def build_simulation(
     """A fresh simulation; the same arguments and an integer seed give an identical run.
 
     `reward` picks the variant of ACO, by default the shared one. The random walk has none.
+    `egoist_share` in `config` makes the shared variant a mixed population; the others ignore it.
     `seed` replaces the seed in `config`. Cans are scattered before any policy draws a number,
     so all variants get the same map for the same seed. Parties are drawn from a stream of their
     own, so they are the same for every variant too and leave the static runs as they were.
@@ -41,8 +42,19 @@ def build_simulation(
     if algorithm == "aco":
         if reward in (None, SHARED):
             pheromone = np.zeros((grid.height, grid.width))
-            policy = AcoPolicy(config, pheromone, distance_map(grid))
-            return Simulation(config, grid, policy, rng, pheromone=pheromone, events=events)
+            if config.n_egoists == 0:
+                policy = AcoPolicy(config, pheromone, distance_map(grid))
+            else:  # a mixed population (P10)
+                policy = MixedPolicy(config, pheromone, distance_map(grid))
+            return Simulation(
+                config,
+                grid,
+                policy,
+                rng,
+                pheromone=pheromone,
+                events=events,
+                egoists=config.n_egoists,
+            )
         if reward == INDIVIDUAL:  # egoists leave no trail, so there is no pheromone at all
             return Simulation(config, grid, IndividualPolicy(config), rng, events=events)
         raise ValueError(f"Unknown reward: {reward}")

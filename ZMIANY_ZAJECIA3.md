@@ -2,7 +2,7 @@
 
 Ten plik opisuje prace od prezentacji na zajęcia 2 (`docs/aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 16 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19) są scalone z `master`. Analiza wrażliwości na worek, promień widzenia i parametry śladu (P7, P8, P9, issue #17) jest na gałęzi `feat/sensitivity`, a sygnały śladu z nagrody i miara J (P3, issue #7) na gałęzi `feat/reward-signals`.
+**Stan:** scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19) są scalone z `master`. Analiza wrażliwości na worek, promień widzenia i parametry śladu (P7, P8, P9, issue #17) jest na gałęzi `feat/sensitivity`, sygnały śladu z nagrody i miara J (P3, issue #7) na gałęzi `feat/reward-signals`, populacja mieszana (P10) na `feat/mixed-population`, a ograniczenie śladu z MAX–MIN (P11), kontrola unikania tłoku i skrypt odtwarzający wszystko na `feat/max-min`. Każda gałąź zawiera poprzednią.
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -13,9 +13,9 @@ Slajd 8 prezentacji wymieniał cztery kierunki dalszych prac:
 | nagroda, która zmienia ilość zostawianego śladu, i cel J | **zrobione (porównanie P3, `ALGORITHM.md` §20)** |
 | analiza wrażliwości na parametry, liczbę agentów, worek i promień widzenia | **zrobione:** liczba agentów (P5, `ALGORITHM.md` §16), układ puszek (P6, §17), worek i promień widzenia (P7, P8, §18), ρ, α i ε (P9, §19) |
 | **scenariusz dynamiczny: nowe imprezy w trakcie przebiegu** | **zrobione (porównanie P4)** |
-| populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | nie zaczęte |
+| populacja mieszana i ograniczenia śladu z MAX–MIN Ant System | **zrobione (porównania P10 i P11, `ALGORITHM.md` §21–22)** |
 
-Ograniczenia ze slajdu 8 częściowo obowiązują. N1 i N2 to wciąż ręczne reguły, a N2 nie używa feromonu. Nagroda może już sterować ruchem przez ilość śladu (P3), ale w pomiarze niczego to nie zmieniło. Unikanie tłoku też dalej prawie nie działa.
+Ograniczenia ze slajdu 8 częściowo obowiązują. N1 i N2 to wciąż ręczne reguły, a N2 nie używa feromonu. Nagroda może już sterować ruchem przez ilość śladu (P3), ale w pomiarze niczego to nie zmieniło. Unikanie tłoku też dalej prawie nie działa: na Miasteczku włącza się przy 0.28% decyzji przy N = 20 i 0.81% przy N = 80 (`ALGORITHM.md` §23).
 
 ## Scenariusz dynamiczny
 
@@ -74,7 +74,7 @@ Miasteczko, ziarna 200–229, T = 20000. Podajemy średnią ± przedział 95%.
 | `plots.py` | porównanie P4: `p4_cans_on_map.png`, `p4_party_latency.png` i tabele w `summary.md` |
 | `__main__.py`, `view.py` | opcja `--scenario` w podglądzie, licznik imprez w pasku stanu |
 
-Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397, po P7–P9 422, a po P3 475. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
+Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397, po P7–P9 422, po P3 475, a po P10, P11 i skrypcie 517. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
 
 Po przeglądzie kodu dodaliśmy kilka poprawek. Nie zmieniły wyników P4, bo w pomiarze nie było imprez niezebranych do limitu:
 - brak pierwszego podniesienia jest cenzurowany tak samo jak brak 50%,
@@ -278,8 +278,65 @@ python -m kaucjowicze --algorithm aco --trail speed --map campus --seed 200 --gu
 
 **Zmiany w kodzie:** pola `trail_signal`, `speed_deposit` i `fairness_gamma` oraz słownik `TRAILS` w `config.py`, licznik kroków kursu i L w `agent.py` i `simulation.py`, `trail_amount` w `rewards.py`, `speed_norm` i `objective_j` w `metrics.py`, opcja `--trails` i kolumny `trail` i `J` w `experiments.py`, opcja `--trail` w podglądzie, raport P3 w `plots.py` (`p3_collection_curve.png`, `p3_tradeoff.png`), skrypt `tools/calibrate_speed_deposit.py`.
 
+## Populacja mieszana (P10)
+
+**Pytanie:** czy egoiści korzystający z cudzych śladów zarabiają więcej kosztem grupy i od jakiego odsetka egoistów współpraca się załamuje. Szczegóły są w `ALGORITHM.md` §21.
+
+**Model:** w kolonii N1 część agentów to egoiści. Nie zostawiają śladu i pamiętają swoje źródło jak N2, ale gdy nic nie pamiętają, idą za cudzym śladem. Udział egoistów: 0, 25, 50, 75 i 100%. Przy 0% to dokładnie N1, a przy 100% dokładnie N2 (sprawdzone).
+
+**Hipotezy (zapisane przed pomiarem):** egoiści zarabiają istotnie więcej niż współpracujący, a tempo kolonii się nie zmienia. Testy Wilcoxona dla par, Bonferroni na 7 testów.
+
+| Egoiści | t₉₀ kolonii | Gini | Puszki na egoistę | Puszki na współpracującego | p (zarobek) |
+|---|---|---|---|---|---|
+| 0% (N1) | 2439 ± 559 | 0.516 | — | 13.5 | — |
+| 25% | 1968 ± 518 | 0.559 | 20.4 ± 2.3 | 11.2 ± 0.8 | 2.6 · 10⁻⁵ ✓ |
+| 50% | 2197 ± 806 | 0.610 | 17.1 ± 1.5 | 9.9 ± 1.5 | 2.1 · 10⁻⁴ ✓ |
+| 75% | 2271 ± 584 | 0.628 | 15.0 ± 0.5 | 9.0 ± 1.5 | 2.1 · 10⁻⁵ ✓ |
+| 100% (N2) | 2360 ± 471 | 0.689 | 13.5 | — | — |
+
+**Wnioski:**
+- **Obie hipotezy się potwierdziły.** Egoiści zarabiają 1.7–1.8 razy więcej niż współpracujący, a t₉₀ kolonii nie zmienia się istotnie przy żadnym udziale.
+- **Egoiści zarabiają kosztem grupy:** współpracujący dostają 9–11 puszek zamiast 13.5 przy równym podziale.
+- **Współpraca załamuje się w podziale, a nie w tempie:** Gini rośnie z udziałem egoistów od 0.516 do 0.689.
+- To pierwsze porównanie, w którym reguła wynikająca z nagrody zmienia wynik w tej samej kolonii.
+
+## Ograniczenie śladu z MAX–MIN (P11)
+
+**Pytanie:** czy górna granica śladu τ_max zapobiega skupieniu się kolonii na jednym skupisku. Dolnej granicy nie dodajemy, bo jej rolę pełni już τ₀ we wzorze na wagę. Szczegóły są w `ALGORITHM.md` §22.
+
+| τ_max | t₉₀ ACO N1 | Gini ACO N1 | J (w₁ = 0.5) | p (t₉₀ wobec braku granicy) |
+|---|---|---|---|---|
+| 0.1 | 3827 ± 899 | 0.425 | 0.692 | 0.014 |
+| 0.5 | 2120 ± 570 | 0.457 | 0.719 | 0.35 |
+| 2 | 2009 ± 638 | 0.510 | 0.695 | 0.29 |
+| 10 | 2793 ± 1325 | 0.516 | 0.672 | 0.92 |
+| bez granicy | 2439 ± 559 | 0.516 | 0.681 | — |
+
+**Wnioski:**
+- **Po korekcie (próg 0.0125) żadna różnica t₉₀ nie jest istotna.** Bardzo niska granica (0.1) spowalnia N1 o 57%, ale p = 0.014 jest tuż nad progiem.
+- **Granica obniża Gini** z 0.516 do 0.457 przy τ_max = 0.5 i 0.425 przy 0.1, czyli prawie do poziomu losowego spaceru (opisowo).
+- **τ_max = 0.5 poprawia równość bez utraty tempa** i daje najwyższe J ze wszystkich wariantów N1. To jedyna zmiana mechaniki, która przesunęła kompromis tempa i równości. Gini nie był testowany, więc to wskazówka.
+
+## Unikanie tłoku przy większej liczbie agentów
+
+Pomiar opisowy (`ALGORITHM.md` §23): kara za tłok włącza się przy 0.28% decyzji o śladzie przy N = 20, 0.36% przy N = 40 i 0.81% przy N = 80 na Miasteczku. Ograniczenie ze slajdu 8 zostaje: unikanie tłoku praktycznie nie działa także przy dużej liczbie agentów.
+
+## Wszystkie wyniki jednym poleceniem
+
+```
+python tools/run_all_experiments.py --jobs 4
+```
+
+Skrypt uruchamia wszystkie eksperymenty P1–P11 (także powtórzenia na mapie testowej) i robi wszystkie raporty do `results/`. Z `--dry-run` tylko wypisuje polecenia.
+
+```
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep egoist_share 0 0.25 0.5 0.75 1
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep pheromone_max 0.1 0.5 2 10 inf
+python tools/crowd_avoidance_rate.py --map campus --n-agents 20 40 80
+```
+
 ## Co zostało do zrobienia
 
 - metryka przywiązania do wyczerpanych skupisk w P4: ile czasu agenci spędzają przy pustych źródłach,
-- populacja mieszana i ograniczenia śladu z MAX–MIN Ant System,
-- pytanie do prowadzącego z `NAGRODY.md` §5 (po P3 nie zmienia już planu prac).
+- test różnicy Giniego przy τ_max = 0.5 na nowych ziarnach (P11 dało tylko wskazówkę),
+- pytanie do prowadzącego z `NAGRODY.md` §5 (po P3 i P10 nie zmienia już planu prac).

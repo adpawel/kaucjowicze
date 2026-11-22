@@ -80,11 +80,13 @@ SWEEP_TITLES = {
     "evaporation_rate": ("P9", "Evaporation rate"),
     "pheromone_alpha": ("P9", "Trail weight exponent"),
     "exploration_rate": ("P9", "Exploration rate"),
+    "egoist_share": ("P10", "Share of egoists"),
+    "pheromone_max": ("P11", "Trail cap of MAX-MIN"),
 }
 # P5 was planned with the unpaired test of P1 and P2; the later sweeps, like P6, pair by seed
 UNPAIRED_SWEEPS = ("n_agents",)
 # Trail parameters change only ACO N1, so P9 tests N1 against itself at the default value
-TRAIL_SWEEPS = ("evaporation_rate", "pheromone_alpha", "exploration_rate")
+TRAIL_SWEEPS = ("evaporation_rate", "pheromone_alpha", "exploration_rate", "pheromone_max")
 # P6 tests the same pair, t_90 and Gini once per layout, paired by seed (decided before it ran)
 P6_METRICS = ("t_90", "gini")
 # Runs written without `--layout` have the counts of their map and scenario
@@ -501,6 +503,84 @@ def sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
     return table
 
 
+def mixed_earnings(results: Results) -> pd.DataFrame:
+    """One row per mixed run of ACO N1 (both kinds of agents): mean cans delivered per egoist
+    and per cooperator. Agents of one run share it, so the run is the unit of a test.
+    """
+    runs = with_sweep_value(results.runs)
+    runs = runs[runs["variant"] == ACO_SHARED]
+    agents = results.agents[results.agents["run_id"].isin(runs["run_id"])]
+    if "egoist" not in agents:
+        return pd.DataFrame(columns=["run_id", "seed", "value", "egoist", "cooperator"])
+    means = agents.groupby(["run_id", "egoist"])["cans"].mean().unstack("egoist")
+    means = means.rename(columns={0: "cooperator", 1: "egoist"}).dropna()
+    table = means.reset_index().merge(runs[["run_id", "seed", "value"]], on="run_id")
+    return table[["run_id", "seed", "value", "egoist", "cooperator"]]
+
+
+def mixed_earnings_table(results: Results) -> pd.DataFrame:
+    """Per share of egoists: mean cans per egoist and per cooperator with intervals."""
+    per_run = mixed_earnings(results)
+    rows = []
+    for value in _sweep_values(per_run, "value"):
+        group = per_run[per_run["value"] == value]
+        row: dict[str, object] = {"value": value, "runs": len(group)}
+        for kind in ("egoist", "cooperator"):
+            row[f"{kind}_mean"], row[f"{kind}_ci"] = mean_ci(group[kind])
+        row["ratio"] = group["egoist"].mean() / group["cooperator"].mean()
+        row["egoists_ahead"] = int((group["egoist"] > group["cooperator"]).sum())
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+# P10 plans 3 earnings tests (mixed shares) and 4 colony tests (shares above 0), decided before
+# the measurement; the threshold stays at 0.05 / 7 even if a share is missing
+P10_TESTS = 7
+
+
+def mixed_significance(results: Results) -> pd.DataFrame:
+    """Wilcoxon signed-rank tests of comparison P10, Bonferroni over all of them:
+
+    - `earnings`: in each mixed run, mean cans per egoist vs per cooperator, paired by run,
+    - `t_90`: the colony at each share of egoists vs no egoists (N1), paired by seed.
+    """
+    rows = []
+    earnings = mixed_earnings(results)
+    for value in _sweep_values(earnings, "value"):
+        group = earnings[earnings["value"] == value]
+        rows.append(
+            {
+                "test": "earnings",
+                "value": value,
+                "pairs": len(group),
+                "p_value": _wilcoxon_p(group["egoist"], group["cooperator"]),
+            }
+        )
+    runs = with_sweep_value(results.runs)
+    aco = runs[runs["variant"] == ACO_SHARED]
+    by_seed = {
+        value: censored(group, "t_90").set_axis(group["seed"])
+        for value, group in aco.groupby("value")
+    }
+    if 0 in by_seed:
+        for value in sorted(by_seed):
+            if value == 0:
+                continue
+            paired = pd.concat({"a": by_seed[value], "b": by_seed[0]}, axis=1, join="inner")
+            rows.append(
+                {
+                    "test": "t_90",
+                    "value": _plain(value),
+                    "pairs": len(paired),
+                    "p_value": _wilcoxon_p(paired["a"], paired["b"]),
+                }
+            )
+    table = pd.DataFrame(rows, columns=["test", "value", "pairs", "p_value"])
+    table["threshold"] = SIGNIFICANCE_LEVEL / P10_TESTS
+    table["significant"] = table["p_value"] < table["threshold"]
+    return table
+
+
 def default_value(parameter: str) -> int | float:
     return _plain(getattr(SimulationConfig(), parameter))
 
@@ -697,11 +777,20 @@ def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path
     figure.savefig(path, dpi=150)
 
 
+def _sweep_positions(values: Iterable[float]) -> list[float]:
+    """Positions on the x axis: no limit (infinity) sits a step past the largest finite value."""
+    values = list(values)
+    finite = [value for value in values if np.isfinite(value)]
+    beyond = max(finite) * 4 if finite else 1.0
+    return [value if np.isfinite(value) else beyond for value in values]
+
+
 def _sweep_axis(axes, values: Sequence[float]) -> None:
     """Doubling values (agents, radius) spread evenly on a log axis; a zero needs a linear one."""
     if min(values) > 0:
         axes.set_xscale("log", base=2)
-    axes.set_xticks(values, [f"{value:g}" for value in values])
+    labels = [f"{value:g}" if np.isfinite(value) else "no cap" for value in values]
+    axes.set_xticks(_sweep_positions(values), labels)
     axes.minorticks_off()
 
 
@@ -718,10 +807,9 @@ def plot_sweep(runs: pd.DataFrame, column: str, title: str, ylabel: str, path: P
         rows = table[table["variant"] == variant]
         mean, half_width = rows[f"{column}_mean"], rows[f"{column}_ci"].fillna(0)
         color = COLORS[variant]
-        axes.fill_between(
-            rows["value"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
-        )
-        axes.plot(rows["value"], mean, color=color, linewidth=2, marker="o", label=LABELS[variant])
+        x = _sweep_positions(rows["value"])
+        axes.fill_between(x, mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0)
+        axes.plot(x, mean, color=color, linewidth=2, marker="o", label=LABELS[variant])
     _sweep_axis(axes, sorted(table["value"].unique()))
     axes.set_ylim(bottom=0)
     axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
@@ -735,7 +823,8 @@ def plot_aco_advantage(runs: pd.DataFrame, title: str, path: Path) -> None:
     xlabel = _sweep_xlabel(sweep_parameter(runs))
     axes = _style_axes(figure, title, xlabel, "t_90 random walk / t_90 ACO N1")
     axes.axhline(1, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
-    axes.plot(table["value"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
+    x = _sweep_positions(table["value"])
+    axes.plot(x, table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
     _sweep_axis(axes, table["value"].tolist())
     axes.set_ylim(bottom=0)
     figure.savefig(path, dpi=150)
@@ -1077,6 +1166,92 @@ def _format_trail_sweep(
     )
 
 
+def format_mixed_summary(results: Results) -> str:
+    """P10 tables as Markdown: the colony by share of egoists, and who earns more."""
+    text = format_sweep_summary(results.runs)
+    text = text[: text.index("## Significance")]  # P10 has its own tests
+    earnings = _markdown_table(
+        (
+            "Egoists",
+            "Runs",
+            "Cans per egoist",
+            "Cans per cooperator",
+            "Egoist / cooperator",
+            "Egoists ahead in",
+        ),
+        (
+            (
+                f"{row.value:g}",
+                row.runs,
+                _with_ci(row.egoist_mean, row.egoist_ci, 1),
+                _with_ci(row.cooperator_mean, row.cooperator_ci, 1),
+                f"{row.ratio:.2f}",
+                f"{row.egoists_ahead}/{row.runs}",
+            )
+            for row in mixed_earnings_table(results).itertuples()
+        ),
+    )
+    significance = _markdown_table(
+        ("Test", "Egoists", "Pairs", "p-value", "Bonferroni threshold", "Significant"),
+        (
+            (
+                row.test,
+                f"{row.value:g}",
+                row.pairs,
+                f"{row.p_value:.3g}",
+                f"{row.threshold:.3g}",
+                "yes" if row.significant else "no",
+            )
+            for row in mixed_significance(results).itertuples()
+        ),
+    )
+    return (
+        f"{text}"
+        "## Earnings of egoists and cooperators\n\n"
+        "Mean cans delivered per agent of each kind in a run, then mean ± 95% interval over the "
+        f"runs of {ACO_SHARED} with both kinds.\n\n"
+        f"{earnings}\n\n"
+        "## Significance\n\n"
+        "Two-sided Wilcoxon signed-rank tests, Bonferroni correction over all of them: "
+        "`earnings` pairs egoists and cooperators of one run, `t_90` pairs the colony at a share "
+        "with the colony without egoists on the same seed.\n\n"
+        f"{significance}\n"
+    )
+
+
+def plot_mixed_earnings(results: Results, title: str, path: Path) -> None:
+    """Mean cans per egoist and per cooperator against the share of egoists."""
+    table = mixed_earnings_table(results)
+    figure = Figure(figsize=(8, 4.5), layout="constrained")
+    axes = _style_axes(figure, title, "Share of egoists", "Cans delivered per agent")
+    runs = results.runs
+    equal = (runs["total_cans"] / runs["n_agents"]).mean() if "total_cans" in runs else None
+    if equal is not None and not np.isnan(equal):
+        axes.axhline(equal, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
+        axes.annotate(
+            "equal split of all cans",
+            (table["value"].min(), equal),
+            xytext=(0, 4),
+            textcoords="offset points",
+            color=TEXT_SECONDARY,
+            fontsize=9,
+        )
+    for kind, variant, label in (
+        ("cooperator", ACO_SHARED, "Cooperators (N1 rules)"),
+        ("egoist", ACO_INDIVIDUAL, "Egoists (N2 rules, follow trails)"),
+    ):
+        mean, half_width = table[f"{kind}_mean"], table[f"{kind}_ci"].fillna(0)
+        color = COLORS[variant]
+        axes.fill_between(
+            table["value"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
+        )
+        axes.plot(table["value"], mean, color=color, linewidth=2, marker="o", label=label)
+    axes.set_xticks(table["value"], [f"{value:g}" for value in table["value"]])
+    axes.set_ylim(bottom=0)
+    axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
+    figure.savefig(path, dpi=150)
+
+
 def format_layout_summary(runs: pd.DataFrame) -> str:
     """P6 tables as Markdown."""
     runs = with_layout(runs)
@@ -1140,6 +1315,8 @@ def report_text(results: Results) -> str:
     if has_layout_sweep(results):
         return format_layout_summary(results.runs)
     if has_sweep(results):
+        if sweep_parameter(results.runs) == "egoist_share":
+            return format_mixed_summary(results)
         return format_sweep_summary(results.runs)
     text = format_summary(results.runs)
     if has_trails(results):
@@ -1207,6 +1384,10 @@ def write_report(results: Results, output_dir: str | Path) -> list[Path]:
         available = set()  # P1, P2 and P4 would mix layouts
     elif has_sweep(results):
         written += _write_sweep_figures(results.runs, label, output)
+        if sweep_parameter(results.runs) == "egoist_share" and not mixed_earnings(results).empty:
+            path = output / "p10_earnings.png"
+            plot_mixed_earnings(results, f"P10: who earns more in a mixed colony ({label})", path)
+            written.append(path)
         available = set()  # P1, P2 and P4 would mix runs of different settings
     else:
         available = set(results.runs["variant"])

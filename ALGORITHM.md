@@ -891,3 +891,143 @@ Pogrubienie oznacza najwyższe średnie J przy danej wadze. Przedziały J mają 
 - **Prawdopodobne wyjaśnienie (niesprawdzone):** sygnały zmieniają tylko względną siłę śladów, a przy α = 1 i τ₀ = 0.01 ślad o sile powyżej około 1 i tak dostaje ponad 94% wagi (punkt 4). W `equal±` waga w_i odchyla ślad co najwyżej kilkukrotnie, a w `speed` wybór między źródłami zależy od b / L, które różni się między kursami mniej niż n. Kolejność wyboru kierunku się więc prawie nie zmienia.
 - **J jawnie zależy od wag.** Przy w₁ ≤ 0.25 (liczy się głównie równość) najwyższe J ma losowy spacer, a przy w₁ ≥ 0.5 warianty ACO. N2 ma najniższe J przy każdej wadze poniżej 1 i dopiero przy w₁ = 1 dogania N1. Między wariantami ACO J różni się o mniej niż 0.01, czyli w granicach szumu, więc **„najlepszy” wariant ACO zależy od przypadku, a nie od celu.**
 - **Odpowiedź na pytanie z `NAGRODY.md`:** wprowadzenie celu przez ilość śladu nie wystarcza, żeby nagroda sterowała kolonią w tym modelu. Nagroda działa realnie dopiero na poziomie reguł (ślad kontra pamięć prywatna w N2), a nie siły śladu. Ten wniosek dotyczy badanych sygnałów i wartości domyślnych α, τ₀, q.
+
+## 21. Populacja mieszana (P10)
+
+**Pytanie z `MILESTONES.md` (Część II):** czy egoiści, którzy korzystają z cudzych śladów, zarabiają więcej kosztem grupy, i od jakiego odsetka egoistów współpraca się załamuje. To ostatni kierunek ze slajdu 8 prezentacji z zajęć 2 obok MAX–MIN (punkt 22). Odpowiada też na ograniczenie z tego slajdu, że N1 i N2 nigdy nie działają razem, więc P2 porównuje dwie osobne kolonie.
+
+### Model
+
+W kolonii ACO N1 część agentów to **egoiści** (`egoist_share`, `MixedPolicy`):
+
+| Zachowanie | Współpracujący | Egoista |
+|---|---|---|
+| zostawia ślad | tak, jak w N1 | **nie** |
+| pamięć prywatna | nie korzysta | pamięta najlepsze źródło i wraca do niego, jak w N2 |
+| gdy nic nie pamięta | idzie za śladem, jak w N1 | **idzie za cudzym śladem**, zamiast błądzić jak w N2 |
+| unikanie tłoku | tak (λ = 0) | nie, jak w N2 |
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Egoistami są pierwsze ⌊e · N + 0.5⌋ agentów | Wszyscy startują z tej samej bazy, więc numer nie ma znaczenia. Przy N = 20 udziały 0.25, 0.5 i 0.75 dają dokładnie 5, 10 i 15 egoistów |
+| Zarobek to puszki oddane przez agenta | Dosłownie nagroda N2. Dla współpracujących średnia ich puszek to zarazem ich nagroda N1, gdyby dzielili pulę między siebie |
+| Udział zmienia tylko wariant ACO N1 | Losowy spacer i N2 są stałym odniesieniem, jak przy ρ, α i ε (punkt 19) |
+| **Kontrola:** e = 0 to dokładnie N1, a e = 1 to dokładnie N2 | Bez współpracujących nie ma śladu, więc egoista bez pamięci błądzi jak w N2, z tym samym losowaniem. Sprawdzają to testy `test_no_egoists_is_n1` i `test_only_egoists_is_n2`, a w pomiarze porównanie z punktem 14 |
+
+`agents.csv` ma nową kolumnę `egoist` (0 lub 1), a `runs.csv` kolumnę `egoists` (liczba egoistów, tylko dla N1). Przegląd robi `--sweep egoist_share`, do katalogu `results/<mapa>_mixed`.
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór |
+|---|---|
+| Udział egoistów e | 0, 0.25, 0.5, 0.75, 1 |
+| Pozostałe | Miasteczko, scenariusz statyczny, wartości domyślne, N = 20, ziarna 200–229, T = 20000 |
+| Testy zarobku | w każdym przebiegu z obydwoma rodzajami agentów (e = 0.25, 0.5, 0.75): średnie puszki egoisty / średnie puszki współpracującego, test Wilcoxona dla par (para to jeden przebieg), 3 testy |
+| Testy kolonii | t₉₀ przy każdym e > 0 / t₉₀ przy e = 0 (czyli N1), test Wilcoxona dla par (to samo ziarno), 4 testy |
+| Korekta | Bonferroni na wszystkie 7 testów (próg 0.05 / 7 ≈ 0.0071) |
+
+Agenci jednego przebiegu nie są niezależni, dlatego jednostką testu zarobku jest przebieg, a nie agent. Gini i pozostałe pary podajemy opisowo.
+
+**Hipotezy:**
+
+1. **Egoiści zarabiają istotnie więcej niż współpracujący przy każdym e = 0.25, 0.5, 0.75.** Korzystają ze śladów innych, a potem wracają do swojego najlepszego źródła i nie ustępują przed tłokiem.
+2. **t₉₀ kolonii nie zmienia się istotnie przy żadnym e.** W P2 N1 i N2 były równie szybkie (punkt 14), więc mieszanka nie powinna być wolniejsza od żadnego z nich. „Załamanie współpracy” spodziewamy się zobaczyć w podziale, a nie w tempie: Gini rośnie z e od wartości N1 (0.516) do wartości N2 (0.689), co podajemy opisowo.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep egoist_share 0 0.25 0.5 0.75 1` (450 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_mixed`. Średnia ± 95%.
+
+**Kontrola:** przy e = 0 przebiegi ACO N1 są identyczne z N1 z punktu 14, a przy e = 1 z N2 z punktu 14 (t₉₀, Gini, liczba kroków i długość tras w każdym przebiegu).
+
+| Udział egoistów e | t₉₀ kolonii | Gini | Puszki na egoistę | Puszki na współpracującego | Egoista / współpracujący | Egoiści lepsi w | p (t₉₀, e / e = 0) | p (zarobek) |
+|---|---|---|---|---|---|---|---|---|
+| 0 (N1) | 2439 ± 559 | 0.516 ± 0.027 | — | 13.5 | — | — | — | — |
+| 0.25 | 1968 ± 518 | 0.559 ± 0.031 | 20.4 ± 2.3 | 11.2 ± 0.8 | 1.81 | 27/30 | 0.15 | 2.6 · 10⁻⁵ ✓ |
+| 0.5 | 2197 ± 806 | 0.610 ± 0.026 | 17.1 ± 1.5 | 9.9 ± 1.5 | 1.72 | 26/30 | 0.38 | 2.1 · 10⁻⁴ ✓ |
+| 0.75 | 2271 ± 584 | 0.628 ± 0.028 | 15.0 ± 0.5 | 9.0 ± 1.5 | 1.67 | 25/30 | 0.70 | 2.1 · 10⁻⁵ ✓ |
+| 1 (N2) | 2360 ± 471 | 0.689 ± 0.027 | 13.5 | — | — | — | 0.97 | — |
+
+✓ oznacza wynik istotny po korekcie Bonferroniego na 7 testów (próg 0.0071). Test Wilcoxona dla par, w każdym teście 30 par. Przy e = 0 i e = 1 średnia na agenta to zawsze 270 / 20 = 13.5, bo zebrano wszystkie puszki.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się.** Egoiści zarabiają istotnie więcej niż współpracujący przy każdym udziale, około 1.7–1.8 razy więcej, i są lepsi w 25–27 z 30 przebiegów.
+- **Egoiści zarabiają kosztem grupy.** Współpracujący w kolonii mieszanej oddają średnio 9.0–11.2 puszki, mniej niż 13.5, które przypadałyby na agenta przy równym podziale (linia na `p10_earnings.png`). Egoista, który przyszedł po cudzym śladzie, zapamiętuje źródło i wraca do niego najkrótszą drogą, więc zabiera puszki, do których ślad prowadził współpracujących.
+- **Przewaga egoisty maleje, gdy egoistów przybywa** (20.4 puszki przy e = 0.25, 15.0 przy e = 0.75), bo jest mniej śladów, z których można korzystać. Opisowo, bez testu.
+- **Hipoteza 2 potwierdza się:** tempo kolonii nie zmienia się istotnie przy żadnym udziale. **Współpraca nie załamuje się więc w tempie, tylko w podziale:** Gini rośnie z e monotonicznie od 0.516 do 0.689. Z punktu widzenia całej kolonii egoiści nie szkodzą, ale z punktu widzenia współpracujących się nie opłacają.
+- **Mieszanka jest średnio najszybsza przy e = 0.25** (1968 wobec 2439 w N1), ale bez istotnej różnicy (p = 0.15). Możliwe, że egoiści przyspieszają opróżnianie znanych skupisk, a współpracujący dalej je znakują, ale tego nie sprawdzaliśmy.
+- **To pierwsze porównanie, w którym nagroda naprawdę zmienia wynik w tej samej kolonii:** reguła wynikająca z nagrody indywidualnej daje agentowi wyraźną przewagę nad agentem z nagrodą wspólną. W P3 zmiana samej siły śladu niczego nie zmieniała (punkt 20).
+
+## 22. Ograniczenie śladu z MAX–MIN Ant System (P11)
+
+**Pytanie z `MILESTONES.md` (Część II):** czy ograniczenie śladu zapobiega zbyt szybkiemu skupieniu się kolonii na jednym skupisku. To drugi kierunek z ostatniej pozycji slajdu 8 prezentacji z zajęć 2.
+
+### Model
+
+W MAX–MIN Ant System (Stützle i Hoos) feromon na każdej komórce leży w przedziale [τ_min, τ_max]. U nas po parowaniu, raz na krok:
+
+```
+τ ← min(τ, τ_max)
+```
+
+| Decyzja | Uzasadnienie |
+|---|---|
+| Tylko górna granica τ_max (`pheromone_max`, domyślnie bez granicy) | Rolę τ_min pełni już τ₀: waga komórki to (τ + τ₀)^α, więc żaden kierunek nie ma wagi zero (punkt 4). Dolna granica τ_min ≥ τ₀ na całej mapie sprawiłaby, że próg z kroku 2 punktu 4 nigdy by nie zadziałał i agent bez śladu nie poruszałby się jak w losowym spacerze, czyli zmieniłaby eksplorację, a nie ślad |
+| Obcinamy po parowaniu, a nie przy zostawianiu | Tak jak w MMAS: granica dotyczy stanu feromonu, a nie pojedynczego śladu. Komórka, na której ślad zostawia kilku agentów naraz, też nie przekroczy τ_max |
+| Bez ponownej inicjalizacji śladu (restartów MMAS) | U nas nie ma iteracji z najlepszym rozwiązaniem. Ślad i tak znika przy wyczerpanym źródle (punkt 2) |
+
+Przy α = 1 i τ₀ = 0.01 jedna komórka ze śladem τ wśród 8 sąsiadów dostaje (τ + τ₀) / (τ + 8τ₀) wagi (punkt 4): przy τ_max = 0.1 najwyżej 61%, przy 0.5 około 87%, przy 2 około 96%. Ślad bez granicy osiąga na Miasteczku kilkadziesiąt jednostek.
+
+### Projekt (ustalony przed pomiarem)
+
+| Element | Wybór |
+|---|---|
+| τ_max | 0.1, 0.5, 2, 10 i bez granicy (wartość domyślna) |
+| Pozostałe | jak w punktach 18–21: Miasteczko, scenariusz statyczny, wartości domyślne, ziarna 200–229, T = 20000, trzy warianty. τ_max zmienia tylko ACO N1 |
+| Testy | ACO N1 przy każdej granicy / ACO N1 bez granicy, t₉₀, test Wilcoxona dla par, Bonferroni na 4 testy (próg 0.0125), jak dla ρ, α i ε w punkcie 19 |
+| Opisowo | Gini oraz przewaga nad losowym spacerem |
+
+**Hipotezy:**
+
+1. **Przy τ_max = 2 i 10 różnica t₉₀ nie jest istotna,** bo taki ślad i tak dostaje ponad 96% wagi, a N1 jest mało wrażliwe na siłę śladu (punkty 19 i 20).
+2. **Przy τ_max = 0.1 N1 jest istotnie wolniejsze,** bo ślad tylko sugeruje kierunek i częściej przegrywa z losowym ruchem. Przy 0.5 różnicy nie przewidujemy.
+3. **Gini maleje przy niskiej granicy** (opisowo), bo kolonia słabiej skupia się na skupisku, które znalazła pierwsza.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep pheromone_max 0.1 0.5 2 10 inf` (450 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_maxmin`. Średnia ± 95%.
+
+**Kontrola:** przebiegi bez granicy są identyczne z punktem 14 we wszystkich kolumnach, które wtedy istniały. Różni się tylko `J`, którego w punkcie 14 jeszcze nie liczyliśmy.
+
+| τ_max | t₉₀ ACO N1 | Gini ACO N1 | J (w₁ = 0.5) | t₉₀ / t₉₀ bez granicy | p | t₉₀ losowy / t₉₀ ACO N1 |
+|---|---|---|---|---|---|---|
+| 0.1 | 3827 ± 899 | 0.425 ± 0.022 | 0.692 | 1.57 | 0.014 | 1.90 |
+| 0.5 | 2120 ± 570 | 0.457 ± 0.031 | **0.719** | 0.87 | 0.35 | 3.42 |
+| 2 | 2009 ± 638 | 0.510 ± 0.038 | 0.695 | 0.82 | 0.29 | 3.61 |
+| 10 | 2793 ± 1325 | 0.516 ± 0.033 | 0.672 | 1.14 | 0.92 | 2.60 |
+| **bez granicy** | 2439 ± 559 | 0.516 ± 0.027 | 0.681 | — | — | 2.98 |
+
+Test Wilcoxona dla par, 30 par w każdym teście. Po korekcie (próg 0.0125) żaden wynik nie jest istotny. Losowy spacer i N2 są przy każdej granicy takie same jak w punkcie 14.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się:** przy τ_max = 2 i 10 t₉₀ nie różni się istotnie od N1 bez granicy.
+- **Hipoteza 2 nie potwierdza się, choć wynik jest blisko progu.** Przy τ_max = 0.1 N1 jest średnio o 57% wolniejsze, ale p = 0.014 leży tuż nad progiem 0.0125. Przewaga nad losowym spacerem spada wtedy z 3.0 do 1.9. Bardzo słaby ślad wyraźnie szkodzi, ale nasz pomiar tego nie dowodzi.
+- **Hipoteza 3 potwierdza się opisowo:** Gini N1 spada z 0.516 bez granicy do 0.457 przy τ_max = 0.5 i 0.425 przy 0.1, czyli prawie do poziomu losowego spaceru (0.407). Granica rzeczywiście osłabia skupianie się kolonii na jednym skupisku.
+- **Odpowiedź na pytanie z `MILESTONES.md`: umiarkowana granica (τ_max = 0.5) poprawia równość bez utraty tempa.** t₉₀ jest średnio nawet trochę niższe (2120 wobec 2439, bez istotnej różnicy), a Gini niższy o 0.06, więc J przy w₁ = 0.5 jest najwyższe ze wszystkich wariantów N1 w tej pracy (0.719 wobec 0.681). To jedyna zmiana mechaniki, która przesunęła kompromis tempa i równości. Różnicy Giniego nie testowaliśmy, więc to wskazówka do sprawdzenia, a nie wniosek.
+- **Zestawienie z P3 i P9:** siła śladu sama w sobie mało zmienia (P9, P3), ale **ograniczenie najsilniejszych śladów** zmienia podział puszek, bo przestaje kierować całą kolonię do jednego źródła.
+
+## 23. Unikanie tłoku przy większej liczbie agentów (kontrola)
+
+Punkt 10 pokazał, że kara za tłok włącza się przy 0,44% decyzji o śladzie na mapie testowej, i proponował sprawdzić to przy większej liczbie agentów. `AcoPolicy` liczy teraz decyzje, przy których w zasięgu był ślad (`trail_decisions`), i te, przy których co najmniej jeden kierunek był zatłoczony (`crowded_decisions`). Liczniki tylko czytają stan, więc przebiegi się nie zmieniają (test `test_crowd_counters_only_read_the_run`). Pomiar opisowy, bez hipotez i testów: `python tools/crowd_avoidance_rate.py --map campus --n-agents 20 40 80`, ziarna 200–229.
+
+| Mapa | N | Decyzje ze śladem | Z zatłoczonym kierunkiem | Udział | Na przebieg |
+|---|---|---|---|---|---|
+| testowa (ziarna 0–29) | 20 | 65414 | 276 | 0.42% | 9.2 |
+| Miasteczko | 20 | 69028 | 192 | 0.28% | 6.4 |
+| Miasteczko | 40 | 101427 | 365 | 0.36% | 12.2 |
+| Miasteczko | 80 | 184605 | 1493 | 0.81% | 49.8 |
+
+Na mapie testowej licznik daje prawie to samo co jednorazowy skrypt z punktu 10 (0.42% wobec 0.44%, 9.2 wobec 9.6 na przebieg, przy tej samej liczbie około 2180 decyzji na przebieg). Różnica wynika prawdopodobnie z innej definicji liczenia w tamtym skrypcie, którego nie ma w repozytorium.
+
+**Wniosek:** udział rośnie z N, ale nawet przy 80 agentach kara działa przy mniej niż 1% decyzji. **Ograniczenie z punktu 10 obowiązuje także na Miasteczku i przy dużym N:** warunek S > C zachodzi tylko przy końcu skupiska, więc unikanie tłoku praktycznie nie wpływa na wyniki, a N1 różni się od zwykłego ACO prawie wyłącznie nazwą nagrody.

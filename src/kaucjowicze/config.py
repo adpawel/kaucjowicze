@@ -1,5 +1,6 @@
 """Simulation parameters."""
 
+import math
 from dataclasses import dataclass
 
 TEST_MAP = "test"
@@ -102,6 +103,7 @@ class SimulationConfig:
     pheromone_alpha: float = 1.0  # alpha: neighbour weight is (tau + tau0) ** alpha
     pheromone_base: float = 0.01  # tau0: weight of a cell without a trail
     exploration_rate: float = 0.1  # epsilon: probability of a random move instead of following
+    pheromone_max: float = math.inf  # tau_max of MAX-MIN Ant System: trail never exceeds it
     crowd_radius: int = 3  # half-width of the window an agent checks for a crowd ahead of a move
     crowd_penalty: float = 0.0  # trail ahead of a crowd counts this much; 1 turns avoidance off
 
@@ -110,11 +112,19 @@ class SimulationConfig:
     speed_deposit: float | None = None  # q_s: `speed` trail per cell = q_s * bag / trip length
     fairness_gamma: float = 1.0  # `equal` weighs the trail by (relative earnings) ** gamma
 
+    # Mixed population (ACO N1 only): this share of the agents are egoists, see `MixedPolicy`
+    egoist_share: float = 0.0
+
     # Time
     max_steps: int | None = None  # T: simulation limit
 
     # Reproducibility
     seed: int | None = None
+
+    @property
+    def n_egoists(self) -> int:
+        """Egoists of a mixed population: the share of the agents, rounded to the nearest."""
+        return round(self.egoist_share * self.n_agents)
 
     @property
     def last_event_step(self) -> int | None:
@@ -189,6 +199,8 @@ class SimulationConfig:
             raise ValueError("Pheromone base level must be positive")
         if not 0.0 <= self.exploration_rate <= 1.0:
             raise ValueError("Exploration rate must be in [0, 1]")
+        if not self.pheromone_max > 0:
+            raise ValueError("Pheromone cap must be positive")
         if self.crowd_radius < 0:
             raise ValueError("Crowd radius must not be negative")
         if not 0.0 <= self.crowd_penalty <= 1.0:
@@ -197,6 +209,8 @@ class SimulationConfig:
             raise ValueError(f"Unknown trail signal: {self.trail_signal}")
         if self.speed_deposit < 0:
             raise ValueError("Speed deposit must not be negative")
+        if not 0.0 <= self.egoist_share <= 1.0:
+            raise ValueError("Egoist share must be in [0, 1]")
 
 
 def trail_name(config: SimulationConfig) -> str:
