@@ -992,3 +992,27 @@ Przy α = 1 i τ₀ = 0.01 jedna komórka ze śladem τ wśród 8 sąsiadów dos
 1. **Przy τ_max = 2 i 10 różnica t₉₀ nie jest istotna,** bo taki ślad i tak dostaje ponad 96% wagi, a N1 jest mało wrażliwe na siłę śladu (punkty 19 i 20).
 2. **Przy τ_max = 0.1 N1 jest istotnie wolniejsze,** bo ślad tylko sugeruje kierunek i częściej przegrywa z losowym ruchem. Przy 0.5 różnicy nie przewidujemy.
 3. **Gini maleje przy niskiej granicy** (opisowo), bo kolonia słabiej skupia się na skupisku, które znalazła pierwsza.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep pheromone_max 0.1 0.5 2 10 inf` (450 przebiegów), raport `python -m kaucjowicze.plots --input results/campus_maxmin`. Średnia ± 95%.
+
+**Kontrola:** przebiegi bez granicy są identyczne z punktem 14 we wszystkich kolumnach, które wtedy istniały. Różni się tylko `J`, którego w punkcie 14 jeszcze nie liczyliśmy.
+
+| τ_max | t₉₀ ACO N1 | Gini ACO N1 | J (w₁ = 0.5) | t₉₀ / t₉₀ bez granicy | p | t₉₀ losowy / t₉₀ ACO N1 |
+|---|---|---|---|---|---|---|
+| 0.1 | 3827 ± 899 | 0.425 ± 0.022 | 0.692 | 1.57 | 0.014 | 1.90 |
+| 0.5 | 2120 ± 570 | 0.457 ± 0.031 | **0.719** | 0.87 | 0.35 | 3.42 |
+| 2 | 2009 ± 638 | 0.510 ± 0.038 | 0.695 | 0.82 | 0.29 | 3.61 |
+| 10 | 2793 ± 1325 | 0.516 ± 0.033 | 0.672 | 1.14 | 0.92 | 2.60 |
+| **bez granicy** | 2439 ± 559 | 0.516 ± 0.027 | 0.681 | — | — | 2.98 |
+
+Test Wilcoxona dla par, 30 par w każdym teście. Po korekcie (próg 0.0125) żaden wynik nie jest istotny. Losowy spacer i N2 są przy każdej granicy takie same jak w punkcie 14.
+
+**Wnioski:**
+
+- **Hipoteza 1 potwierdza się:** przy τ_max = 2 i 10 t₉₀ nie różni się istotnie od N1 bez granicy.
+- **Hipoteza 2 nie potwierdza się, choć wynik jest blisko progu.** Przy τ_max = 0.1 N1 jest średnio o 57% wolniejsze, ale p = 0.014 leży tuż nad progiem 0.0125. Przewaga nad losowym spacerem spada wtedy z 3.0 do 1.9. Bardzo słaby ślad wyraźnie szkodzi, ale nasz pomiar tego nie dowodzi.
+- **Hipoteza 3 potwierdza się opisowo:** Gini N1 spada z 0.516 bez granicy do 0.457 przy τ_max = 0.5 i 0.425 przy 0.1, czyli prawie do poziomu losowego spaceru (0.407). Granica rzeczywiście osłabia skupianie się kolonii na jednym skupisku.
+- **Odpowiedź na pytanie z `MILESTONES.md`: umiarkowana granica (τ_max = 0.5) poprawia równość bez utraty tempa.** t₉₀ jest średnio nawet trochę niższe (2120 wobec 2439, bez istotnej różnicy), a Gini niższy o 0.06, więc J przy w₁ = 0.5 jest najwyższe ze wszystkich wariantów N1 w tej pracy (0.719 wobec 0.681). To jedyna zmiana mechaniki, która przesunęła kompromis tempa i równości. Różnicy Giniego nie testowaliśmy, więc to wskazówka do sprawdzenia, a nie wniosek.
+- **Zestawienie z P3 i P9:** siła śladu sama w sobie mało zmienia (P9, P3), ale **ograniczenie najsilniejszych śladów** zmienia podział puszek, bo przestaje kierować całą kolonię do jednego źródła.
