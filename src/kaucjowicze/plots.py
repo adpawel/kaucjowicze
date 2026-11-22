@@ -1214,6 +1214,18 @@ def plot_mixed_earnings(results: Results, title: str, path: Path) -> None:
     table = mixed_earnings_table(results)
     figure = Figure(figsize=(8, 4.5), layout="constrained")
     axes = _style_axes(figure, title, "Share of egoists", "Cans delivered per agent")
+    runs = results.runs
+    equal = (runs["total_cans"] / runs["n_agents"]).mean() if "total_cans" in runs else None
+    if equal is not None and not np.isnan(equal):
+        axes.axhline(equal, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
+        axes.annotate(
+            "equal split of all cans",
+            (table["value"].min(), equal),
+            xytext=(0, 4),
+            textcoords="offset points",
+            color=TEXT_SECONDARY,
+            fontsize=9,
+        )
     for kind, variant, label in (
         ("cooperator", ACO_SHARED, "Cooperators (N1 rules)"),
         ("egoist", ACO_INDIVIDUAL, "Egoists (N2 rules, follow trails)"),
