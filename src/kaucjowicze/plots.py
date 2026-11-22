@@ -404,7 +404,7 @@ def sweep_significance(runs: pd.DataFrame) -> pd.DataFrame:
 def with_layout(runs: pd.DataFrame) -> pd.DataFrame:
     """Runs with a `layout` column; one written without a layout gets `DEFAULT_LAYOUT`."""
     layout = runs["layout"] if "layout" in runs else pd.Series(np.nan, index=runs.index)
-    return runs.assign(layout=layout.fillna(DEFAULT_LAYOUT))
+    return runs.assign(layout=layout.astype(object).fillna(DEFAULT_LAYOUT))  # all empty: floats
 
 
 def has_layout_sweep(results: Results) -> bool:
