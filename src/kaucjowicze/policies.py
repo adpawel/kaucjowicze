@@ -120,6 +120,8 @@ class AcoPolicy:
         self.pheromone = pheromone  # read only; the simulation lays and evaporates trails
         self.distance = distance
         self._explorer = RandomWalkPolicy(config.direction_persistence)
+        self.trail_decisions = 0  # moves chosen with a trail in reach, after crowd penalties
+        self.crowded_decisions = 0  # of all moves with a trail before the penalty: some crowded
 
     def choose_move(
         self,
@@ -133,7 +135,11 @@ class AcoPolicy:
             return agent.pos
 
         trail = self._outward_trail(agent.pos, options)
-        self._penalise_crowds(trail, agent.pos, options, grid, agents)
+        had_trail = trail.max() > self.tau0
+        if self._penalise_crowds(trail, agent.pos, options, grid, agents):
+            self.crowded_decisions += 1
+        if had_trail:
+            self.trail_decisions += 1
         if trail.max() <= self.tau0:
             return self._explorer.choose_move(agent, grid, rng)
         if rng.random() < self.epsilon:
@@ -157,12 +163,16 @@ class AcoPolicy:
         options: list[Position],
         grid: Grid,
         agents: Sequence[Agent],
-    ) -> None:
+    ) -> bool:
+        """Scale down the trail towards crowds; whether any direction was crowded."""
         if self.crowd_penalty == 1.0:
-            return
+            return False
+        crowded = False
         for i, option in enumerate(options):
             if trail[i] > self.tau0 and self._is_crowded(pos, option, grid, agents):
                 trail[i] *= self.crowd_penalty
+                crowded = True
+        return crowded
 
     def _is_crowded(
         self, pos: Position, option: Position, grid: Grid, agents: Sequence[Agent]

@@ -188,3 +188,15 @@ def test_a_wall_hides_the_crowd_behind_it():
     policy = AcoPolicy(config, pheromone, np.zeros((11, 30), dtype=np.int32))
     crowd = [Agent(i, (15, 3 + i)) for i in range(3)]  # behind the wall, more agents than cans
     assert not policy._is_crowded((10, 5), (11, 5), grid, crowd)
+
+
+def test_crowd_counters_only_read_the_run():
+    from kaucjowicze.factory import build_simulation
+    from kaucjowicze.metrics import record_run
+
+    config = SimulationConfig(n_agents=30, max_steps=300)
+    sim = build_simulation("aco", 2, config=config)
+    record = record_run(sim)
+    assert sim.policy.trail_decisions > 0
+    assert 0 <= sim.policy.crowded_decisions <= sim.policy.trail_decisions
+    assert record_run(build_simulation("aco", 2, config=config)) == record

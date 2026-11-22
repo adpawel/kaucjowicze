@@ -1016,3 +1016,18 @@ Test Wilcoxona dla par, 30 par w każdym teście. Po korekcie (próg 0.0125) ża
 - **Hipoteza 3 potwierdza się opisowo:** Gini N1 spada z 0.516 bez granicy do 0.457 przy τ_max = 0.5 i 0.425 przy 0.1, czyli prawie do poziomu losowego spaceru (0.407). Granica rzeczywiście osłabia skupianie się kolonii na jednym skupisku.
 - **Odpowiedź na pytanie z `MILESTONES.md`: umiarkowana granica (τ_max = 0.5) poprawia równość bez utraty tempa.** t₉₀ jest średnio nawet trochę niższe (2120 wobec 2439, bez istotnej różnicy), a Gini niższy o 0.06, więc J przy w₁ = 0.5 jest najwyższe ze wszystkich wariantów N1 w tej pracy (0.719 wobec 0.681). To jedyna zmiana mechaniki, która przesunęła kompromis tempa i równości. Różnicy Giniego nie testowaliśmy, więc to wskazówka do sprawdzenia, a nie wniosek.
 - **Zestawienie z P3 i P9:** siła śladu sama w sobie mało zmienia (P9, P3), ale **ograniczenie najsilniejszych śladów** zmienia podział puszek, bo przestaje kierować całą kolonię do jednego źródła.
+
+## 23. Unikanie tłoku przy większej liczbie agentów (kontrola)
+
+Punkt 10 pokazał, że kara za tłok włącza się przy 0,44% decyzji o śladzie na mapie testowej, i proponował sprawdzić to przy większej liczbie agentów. `AcoPolicy` liczy teraz decyzje, przy których w zasięgu był ślad (`trail_decisions`), i te, przy których co najmniej jeden kierunek był zatłoczony (`crowded_decisions`). Liczniki tylko czytają stan, więc przebiegi się nie zmieniają (test `test_crowd_counters_only_read_the_run`). Pomiar opisowy, bez hipotez i testów: `python tools/crowd_avoidance_rate.py --map campus --n-agents 20 40 80`, ziarna 200–229.
+
+| Mapa | N | Decyzje ze śladem | Z zatłoczonym kierunkiem | Udział | Na przebieg |
+|---|---|---|---|---|---|
+| testowa (ziarna 0–29) | 20 | 65414 | 276 | 0.42% | 9.2 |
+| Miasteczko | 20 | 69028 | 192 | 0.28% | 6.4 |
+| Miasteczko | 40 | 101427 | 365 | 0.36% | 12.2 |
+| Miasteczko | 80 | 184605 | 1493 | 0.81% | 49.8 |
+
+Na mapie testowej licznik daje prawie to samo co jednorazowy skrypt z punktu 10 (0.42% wobec 0.44%, 9.2 wobec 9.6 na przebieg, przy tej samej liczbie około 2180 decyzji na przebieg). Różnica wynika prawdopodobnie z innej definicji liczenia w tamtym skrypcie, którego nie ma w repozytorium.
+
+**Wniosek:** udział rośnie z N, ale nawet przy 80 agentach kara działa przy mniej niż 1% decyzji. **Ograniczenie z punktu 10 obowiązuje także na Miasteczku i przy dużym N:** warunek S > C zachodzi tylko przy końcu skupiska, więc unikanie tłoku praktycznie nie wpływa na wyniki, a N1 różni się od zwykłego ACO prawie wyłącznie nazwą nagrody.
