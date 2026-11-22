@@ -2,8 +2,9 @@
 
 Ten dokument rozpisuje, co pokazujemy na najbliższych zajęciach i co zostaje na później. Ogólny model i literatura są w [`PLAN.md`](PLAN.md). Tutaj doprecyzowujemy założenia i funkcje nagrody. Wzory i decyzje podjęte przy implementacji zbiera [`ALGORITHM.md`](ALGORITHM.md).
 
-**Stan obecny (`master`):** siatka z przeszkodami, punkt skupu, generator puszek w skupiskach, tymczasowa mapa testowa, podgląd w konsoli, testy i CI.
-**Brakuje:** agentów, ACO, wizualizacji, funkcji nagrody, metryk i porównań.
+**Stan przy pisaniu tego dokumentu (przed zajęciami 2):** siatka z przeszkodami, punkt skupu, generator puszek w skupiskach, tymczasowa mapa testowa, podgląd w konsoli, testy i CI. Brakowało agentów, ACO, wizualizacji, funkcji nagrody, metryk i porównań.
+
+**Stan obecny (22 listopada 2026):** Część I jest zrobiona i została pokazana na zajęciach 2. Z Części II zrobiliśmy scenariusz dynamiczny (P4), liczbę agentów (P5) i układ puszek (P6), a pozostałe pozycje czekają (kolumna „Stan” w Części II). Zmiany od zajęć 2 opisuje [`ZMIANY_ZAJECIA3.md`](ZMIANY_ZAJECIA3.md).
 
 ---
 
@@ -131,11 +132,11 @@ Pierwsze dwa i ostatni branch mogą ruszyć równolegle od razu.
 
 ### 8. Gotowe, gdy
 
-- [ ] `python -m kaucjowicze ... --gui` pokazuje działającą symulację dla wszystkich trzech wariantów: losowy spacer, ACO z N1, agenci N2
-- [ ] symulacja bez okna przechodzi w CI, są testy agenta, feromonu i metryk
-- [ ] `experiments.py` generuje CSV dla P1 i P2 (30 ziaren)
-- [ ] wykresy z P1 i P2 są wygenerowane i zapisane, np. w `results/figures/` (poza repozytorium), a wybrane trafiają do prezentacji
-- [ ] założenia z tego dokumentu są zgodne z kodem (wartości domyślne w `SimulationConfig`)
+- [x] `python -m kaucjowicze ... --gui` pokazuje działającą symulację dla wszystkich trzech wariantów: losowy spacer, ACO z N1, agenci N2
+- [x] symulacja bez okna przechodzi w CI, są testy agenta, feromonu i metryk
+- [x] `experiments.py` generuje CSV dla P1 i P2 (30 ziaren)
+- [x] wykresy z P1 i P2 są wygenerowane i zapisane, np. w `results/figures/` (poza repozytorium), a wybrane trafiają do prezentacji
+- [x] założenia z tego dokumentu są zgodne z kodem (wartości domyślne w `SimulationConfig`). Odejścia od nich i wartości dla mapy Miasteczka zbiera `ALGORITHM.md`
 
 ---
 
@@ -145,24 +146,26 @@ Kolejności i podziału na zajęcia jeszcze nie ustalamy.
 
 ### Kolejne porównania
 
-| Porównanie | Pytanie |
-|---|---|
-| **Populacja mieszana** (0/25/50/75/100% egoistów) | Czy egoiści korzystający z cudzych śladów zarabiają więcej kosztem grupy? Od jakiego odsetka współpraca się załamuje? |
-| **Nagroda ważona** `R_i = w · (własne) + (1 − w) · (wspólne / N)` dla w ∈ {0, 0.25, 0.5, 0.75, 1} | Jak płynnie przejść od współpracy do egoizmu? Gdzie jest kompromis między tempem a równością (`J` z `PLAN.md` 4.2)? |
-| **Wrażliwość na ρ** | Za szybkie parowanie oznacza brak pamięci, za wolne powoduje, że agenci trzymają się wyczerpanych skupisk |
-| **Wrażliwość na α i ε** | Balans eksploatacji śladów i eksploracji |
-| **Liczba agentów N** | Skalowanie i moment, od którego tłok szkodzi |
-| **Pojemność worka k** | Mało dużych kursów kontra dużo małych |
-| **Promień widzenia r** | Ile daje feromon, gdy agenci dobrze widzą |
-| **Scenariusz dynamiczny** („imprezy” w trakcie) | Czy kolonia porzuca wyczerpane skupiska i znajduje nowe? |
-| **Liczba i położenie punktów skupu** | Jeden centralny kontra kilka na obrzeżach |
-| **Rozkład puszek** | Mało dużych skupisk, dużo małych skupisk, rozkład jednorodny (kiedy ACO przestaje pomagać) |
-| **MAX–MIN** (τ_min/τ_max) kontra zwykłe parowanie | Czy ograniczenia śladu zapobiegają zbyt szybkiemu skupieniu się na jednym skupisku? |
-| **Mapa testowa kontra prawdziwa mapa MS AGH** | Czy wnioski przenoszą się na realny układ budynków? |
+Stan na 22 listopada 2026. Odnośniki § prowadzą do `ALGORITHM.md`.
+
+| Porównanie | Pytanie | Stan |
+|---|---|---|
+| **Populacja mieszana** (0/25/50/75/100% egoistów) | Czy egoiści korzystający z cudzych śladów zarabiają więcej kosztem grupy? Od jakiego odsetka współpraca się załamuje? | nie zaczęte |
+| **Nagroda ważona** `R_i = w · (własne) + (1 − w) · (wspólne / N)` dla w ∈ {0, 0.25, 0.5, 0.75, 1} | Jak płynnie przejść od współpracy do egoizmu? Gdzie jest kompromis między tempem a równością (`J` z `PLAN.md` 4.2)? | nie zaczęte. Pokrewna propozycja (nagroda zmienia ilość śladu, porównanie P3) jest w [`NAGRODY.md`](NAGRODY.md) |
+| **Wrażliwość na ρ** | Za szybkie parowanie oznacza brak pamięci, za wolne powoduje, że agenci trzymają się wyczerpanych skupisk | nie zaczęte (tylko wstępny pomiar na mapie testowej, §7) |
+| **Wrażliwość na α i ε** | Balans eksploatacji śladów i eksploracji | nie zaczęte (ε tylko we wstępnym pomiarze, §7) |
+| **Liczba agentów N** | Skalowanie i moment, od którego tłok szkodzi | **zrobione: porównanie P5, §16** |
+| **Pojemność worka k** | Mało dużych kursów kontra dużo małych | nie zaczęte |
+| **Promień widzenia r** | Ile daje feromon, gdy agenci dobrze widzą | nie zaczęte |
+| **Scenariusz dynamiczny** („imprezy” w trakcie) | Czy kolonia porzuca wyczerpane skupiska i znajduje nowe? | **zrobione: porównanie P4, §15** (szybkość znajdowania nowych skupisk). Metryka przywiązania do wyczerpanych skupisk nie jest wdrożona |
+| **Liczba i położenie punktów skupu** | Jeden centralny kontra kilka na obrzeżach | nie zaczęte |
+| **Rozkład puszek** | Mało dużych skupisk, dużo małych skupisk, rozkład jednorodny (kiedy ACO przestaje pomagać) | **zrobione: porównanie P6, §17** |
+| **MAX–MIN** (τ_min/τ_max) kontra zwykłe parowanie | Czy ograniczenia śladu zapobiegają zbyt szybkiemu skupieniu się na jednym skupisku? | nie zaczęte |
+| **Mapa testowa kontra prawdziwa mapa MS AGH** | Czy wnioski przenoszą się na realny układ budynków? | **zrobione:** P1 i P2 na obu mapach (§12 i §14) |
 
 ### Pozostałe prace
-- przeniesienie prawdziwej mapy MS AGH (budynki, ścieżki, położenie punktu skupu) i mapa jako tło wizualizacji,
-- scenariusz dynamiczny,
-- skrypt uruchamiający wszystkie eksperymenty jednym poleceniem i odtwarzający wykresy do sprawozdania,
+- ~~przeniesienie prawdziwej mapy MS AGH (budynki, ścieżki, położenie punktu skupu) i mapa jako tło wizualizacji~~: zrobione (§13),
+- ~~scenariusz dynamiczny~~: zrobione (§15),
+- skrypt uruchamiający wszystkie eksperymenty jednym poleceniem i odtwarzający wykresy do sprawozdania (na razie osobne polecenia dla każdego porównania, zob. `README.md`),
 - dopracowanie demo,
 - sprawozdanie: założenia, metodologia, wyniki, wnioski, ograniczenia modelu.
