@@ -841,3 +841,17 @@ def test_mixed_population_report(tmp_path):
     assert summary.startswith("# Share of egoists (P10)")
     assert "## Earnings of egoists and cooperators" in summary
     assert summary.count("## Significance") == 1
+
+
+def test_cap_sweep_compares_with_no_cap(tmp_path):
+    config = SimulationConfig(
+        width=30, height=20, n_clusters=2, cans_per_cluster=5, n_agents=3, max_steps=150
+    )
+    write_tables(run_sweep([0, 1], "pheromone_max", [0.5, float("inf")], config), tmp_path)
+    results = load_results(tmp_path)
+    names = {path.name for path in write_report(results, tmp_path / "figures")}
+    assert "p11_t90_vs_maxmin.png" in names
+    summary = report_text(results)
+    assert summary.startswith("# Trail cap of MAX-MIN (P11)")
+    assert "at the default tau_max = inf" in summary
+    assert "| 0.5 | 2 |" in summary  # one test: the cap against no cap, on both seeds

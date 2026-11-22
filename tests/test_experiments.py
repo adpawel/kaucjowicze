@@ -100,6 +100,7 @@ def test_columns_follow_the_documented_format():
         "sweep_value",
         "trail",
         "egoists",
+        "tau_max",
     )
     assert TIMELINE_COLUMNS == (
         "run_id",

@@ -148,6 +148,8 @@ class Simulation:
                 self._carry(agent)
         if self.pheromone is not None:
             self.pheromone *= 1.0 - self.config.evaporation_rate
+            if self.config.pheromone_max < np.inf:  # MAX-MIN: cut the trail at tau_max
+                np.minimum(self.pheromone, self.config.pheromone_max, out=self.pheromone)
         self.step_count += 1
         self._spawn_due()
 

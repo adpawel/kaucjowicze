@@ -165,3 +165,23 @@ def test_integer_pheromone_is_rejected():
         Simulation(
             config, grid, policy, np.random.default_rng(0), pheromone=np.zeros_like(grid.cans)
         )
+
+
+def test_trail_is_cut_at_the_cap_of_max_min():
+    sim = _trail_sim(_corridor_with_base(), evaporation_rate=0.0, pheromone_max=1.5)
+    _carrying_at(sim, (3, 0), source_cans=4)
+    sim.step()
+    assert sim.pheromone[0, 3] == pytest.approx(1.5)
+
+
+def test_without_a_cap_the_trail_is_not_cut():
+    sim = _trail_sim(_corridor_with_base(), evaporation_rate=0.0)
+    _carrying_at(sim, (3, 0), source_cans=40)
+    sim.step()
+    assert sim.pheromone[0, 3] == pytest.approx(40.0)
+
+
+@pytest.mark.parametrize("cap", [0.0, -1.0])
+def test_cap_must_be_positive(cap):
+    with pytest.raises(ValueError, match="cap"):
+        SimulationConfig(pheromone_max=cap)

@@ -49,6 +49,7 @@ SWEEPS = {
     "pheromone_alpha": Sweep(float, "alpha", "alpha"),
     "exploration_rate": Sweep(float, "eps", "eps"),
     "egoist_share": Sweep(float, "egoists", "mixed"),
+    "pheromone_max": Sweep(float, "tau_max", "maxmin"),
 }
 
 VARIANTS: tuple[Variant, ...] = (("random", None), ("aco", SHARED), ("aco", INDIVIDUAL))
@@ -91,6 +92,7 @@ RUNS_COLUMNS = (
     "sweep_value",
     "trail",
     "egoists",
+    "tau_max",
 )
 TIMELINE_COLUMNS = (
     "run_id",
@@ -179,6 +181,7 @@ def _run_row(
         "sweep_value": None,
         "trail": trail_name(config) if follows_trails else None,
         "egoists": config.n_egoists if follows_trails else None,
+        "tau_max": config.pheromone_max if follows_trails else None,
     }
 
 

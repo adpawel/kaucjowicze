@@ -81,11 +81,12 @@ SWEEP_TITLES = {
     "pheromone_alpha": ("P9", "Trail weight exponent"),
     "exploration_rate": ("P9", "Exploration rate"),
     "egoist_share": ("P10", "Share of egoists"),
+    "pheromone_max": ("P11", "Trail cap of MAX-MIN"),
 }
 # P5 was planned with the unpaired test of P1 and P2; the later sweeps, like P6, pair by seed
 UNPAIRED_SWEEPS = ("n_agents",)
 # Trail parameters change only ACO N1, so P9 tests N1 against itself at the default value
-TRAIL_SWEEPS = ("evaporation_rate", "pheromone_alpha", "exploration_rate")
+TRAIL_SWEEPS = ("evaporation_rate", "pheromone_alpha", "exploration_rate", "pheromone_max")
 # P6 tests the same pair, t_90 and Gini once per layout, paired by seed (decided before it ran)
 P6_METRICS = ("t_90", "gini")
 # Runs written without `--layout` have the counts of their map and scenario
@@ -776,11 +777,20 @@ def plot_cans_on_map(results: Results, variants: Sequence[str], title: str, path
     figure.savefig(path, dpi=150)
 
 
+def _sweep_positions(values: Iterable[float]) -> list[float]:
+    """Positions on the x axis: no limit (infinity) sits a step past the largest finite value."""
+    values = list(values)
+    finite = [value for value in values if np.isfinite(value)]
+    beyond = max(finite) * 4 if finite else 1.0
+    return [value if np.isfinite(value) else beyond for value in values]
+
+
 def _sweep_axis(axes, values: Sequence[float]) -> None:
     """Doubling values (agents, radius) spread evenly on a log axis; a zero needs a linear one."""
     if min(values) > 0:
         axes.set_xscale("log", base=2)
-    axes.set_xticks(values, [f"{value:g}" for value in values])
+    labels = [f"{value:g}" if np.isfinite(value) else "no cap" for value in values]
+    axes.set_xticks(_sweep_positions(values), labels)
     axes.minorticks_off()
 
 
@@ -797,10 +807,9 @@ def plot_sweep(runs: pd.DataFrame, column: str, title: str, ylabel: str, path: P
         rows = table[table["variant"] == variant]
         mean, half_width = rows[f"{column}_mean"], rows[f"{column}_ci"].fillna(0)
         color = COLORS[variant]
-        axes.fill_between(
-            rows["value"], mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0
-        )
-        axes.plot(rows["value"], mean, color=color, linewidth=2, marker="o", label=LABELS[variant])
+        x = _sweep_positions(rows["value"])
+        axes.fill_between(x, mean - half_width, mean + half_width, color=color, alpha=0.18, lw=0)
+        axes.plot(x, mean, color=color, linewidth=2, marker="o", label=LABELS[variant])
     _sweep_axis(axes, sorted(table["value"].unique()))
     axes.set_ylim(bottom=0)
     axes.legend(frameon=False, loc="best", labelcolor=TEXT_PRIMARY)
@@ -814,7 +823,8 @@ def plot_aco_advantage(runs: pd.DataFrame, title: str, path: Path) -> None:
     xlabel = _sweep_xlabel(sweep_parameter(runs))
     axes = _style_axes(figure, title, xlabel, "t_90 random walk / t_90 ACO N1")
     axes.axhline(1, color=TEXT_SECONDARY, linewidth=1, linestyle=":")
-    axes.plot(table["value"], table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
+    x = _sweep_positions(table["value"])
+    axes.plot(x, table["ratio"], color=COLORS[ACO_SHARED], linewidth=2, marker="o")
     _sweep_axis(axes, table["value"].tolist())
     axes.set_ylim(bottom=0)
     figure.savefig(path, dpi=150)
