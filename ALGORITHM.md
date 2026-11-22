@@ -743,3 +743,34 @@ Test Wilcoxona dla par, we wszystkich testach 30 par.
 3. **ε:** żadna różnica nie jest istotna. ε działa tylko na komórkach ze śladem (punkt 5), a ślad i tak zanika, gdy skupisko się wyczerpie.
 
 **Zastrzeżenie:** ρ zmienia też to, jak długo ślad przeżywa drogę. Przy ρ = 0.05 ślad o sile 5 spada do τ₀ po około 121 krokach, a najdalsza komórka Miasteczka jest 80 kroków od bazy, więc ślad do dalekiego skupiska może zniknąć, zanim ktoś za nim pójdzie.
+
+### Wyniki
+
+Pomiar z 22 listopada 2026: `python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --sweep evaporation_rate 0.005 0.01 0.02 0.05`, tak samo `--sweep pheromone_alpha 0.5 1 2 4` i `--sweep exploration_rate 0 0.05 0.1 0.3`, po 360 przebiegów, raport `python -m kaucjowicze.plots --input results/campus_rho` (i `_alpha`, `_eps`). Średnia ± 95%.
+
+**Kontrola:** przebiegi przy wartościach domyślnych są identyczne z punktem 14 (wspólne kolumny `runs.csv`, `timeline.csv`, `agents.csv`), a przebiegi losowego spaceru i N2 są identyczne przy każdej wartości ρ, α i ε, więc te parametry naprawdę zmieniają tylko N1. Losowy spacer ma zawsze t₉₀ 7257 ± 1588.
+
+| Parametr | Wartość | t₉₀ ACO N1 | Gini ACO N1 | t₉₀ / t₉₀ przy wartości domyślnej | p (N1 / N1 domyślne) | t₉₀ losowy / t₉₀ ACO N1 |
+|---|---|---|---|---|---|---|
+| ρ | 0.005 | 2901 ± 733 | 0.530 ± 0.031 | 1.19 | 0.28 | 2.50 |
+| ρ | 0.01 | 2533 ± 857 | 0.514 ± 0.030 | 1.04 | 0.75 | 2.87 |
+| ρ | **0.02** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| ρ | 0.05 | 2590 ± 1054 | 0.488 ± 0.026 | 1.06 | 0.30 | 2.80 |
+| α | 0.5 | 2595 ± 1005 | 0.477 ± 0.031 | 1.06 | 0.82 | 2.80 |
+| α | **1** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| α | 2 | 2448 ± 842 | 0.525 ± 0.031 | 1.00 | 0.72 | 2.96 |
+| α | 4 | 2137 ± 421 | 0.511 ± 0.032 | 0.88 | 0.66 | 3.40 |
+| ε | 0 | 1899 ± 472 | 0.524 ± 0.031 | 0.78 | 0.073 | 3.82 |
+| ε | 0.05 | 2305 ± 534 | 0.536 ± 0.039 | 0.94 | 0.56 | 3.15 |
+| ε | **0.1** | 2439 ± 559 | 0.516 ± 0.027 | — | — | 2.98 |
+| ε | 0.3 | 1885 ± 483 | 0.470 ± 0.029 | 0.77 | 0.13 | 3.85 |
+
+Pogrubienie oznacza wartość domyślną. Test Wilcoxona dla par, 30 par w każdym teście. Po korekcie (próg 0.0167) żaden wynik nie jest istotny.
+
+**Wnioski:**
+
+- **Hipoteza 1 (ρ) potwierdza się tylko częściowo.** N1 jest średnio najszybsze przy wartości domyślnej, ale różnica przy ρ = 0.005 nie jest istotna (o 19% wolniej, p = 0.28), a przewidywaliśmy, że będzie. Przy ρ = 0.01 i 0.05 różnicy nie ma, zgodnie z hipotezą.
+- **Hipoteza 2 (α) potwierdza się tylko częściowo.** Przy α = 0.5 N1 nie jest istotnie wolniejsze (p = 0.82), choć tego się spodziewaliśmy. Przy α = 2 i 4 różnicy nie ma, zgodnie z hipotezą.
+- **Hipoteza 3 (ε) się potwierdza:** żadna różnica nie jest istotna. Średnie przy ε = 0 i ε = 0.3 są o około 22% niższe niż przy 0.1, ale z dwóch stron wartości domyślnej i bez korekty p = 0.073 i 0.13, więc to raczej szum niż kierunek.
+- **Ogólnie: N1 jest mało wrażliwe na parametry śladu w badanych zakresach.** Średnie t₉₀ mieszczą się w 1885–2901, a przedziały ufności wszystkich wartości się nakładają. Wartości domyślne z `MILESTONES.md` są więc rozsądne także na Miasteczku, chociaż ich tam nie stroiliśmy. Przewaga nad losowym spacerem wynosi 2.5–3.9 przy każdej wartości.
+- **Nie znaczy to, że parametry nie mają znaczenia,** tylko że przy 30 ziarnach i rozrzucie t₉₀ N1 (przedział ± 400–1000 kroków) nie wykrywamy różnic mniejszych niż około 20–30%.
