@@ -1,8 +1,8 @@
 # Zmiany od zajęć 2
 
-Ten plik opisuje prace od prezentacji na zajęcia 2 (`aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 15 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
+Ten plik opisuje prace od prezentacji na zajęcia 2 (`docs/aiin_prezentacja_zajecia2.pptx`, commit `df7d55a`, 9 listopada 2026) do 16 listopada 2026. Szczegóły wzorów i decyzji są w `ALGORITHM.md` §15–17.
 
-**Stan:** scenariusz dynamiczny (PR #15) i porównanie P5, liczba agentów (PR #16), są scalone z `master`. Porównanie P6 (układ puszek) jest na gałęzi `adpawel/feat/can-layout`.
+**Stan:** wszystko z tego pliku jest scalone z `master`: scenariusz dynamiczny (P4, PR #15), liczba agentów (P5, PR #16) i układ puszek (P6, PR #19).
 
 ## Co zrobiliśmy z listy „Następne kroki”
 
@@ -74,7 +74,7 @@ Miasteczko, ziarna 200–229, T = 20000. Podajemy średnią ± przedział 95%.
 | `plots.py` | porównanie P4: `p4_cans_on_map.png`, `p4_party_latency.png` i tabele w `summary.md` |
 | `__main__.py`, `view.py` | opcja `--scenario` w podglądzie, licznik imprez w pasku stanu |
 
-Testów jest teraz 357, a w czasie prezentacji było ich 314. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
+Po tej zmianie testów było 357, a w czasie prezentacji 314. Po P5 i P6 jest ich 397. Przechodzą wszystkie, a `ruff` nie zgłasza uwag.
 
 Po przeglądzie kodu dodaliśmy kilka poprawek. Nie zmieniły wyników P4, bo w pomiarze nie było imprez niezebranych do limitu:
 - brak pierwszego podniesienia jest cenzurowany tak samo jak brak 50%,
@@ -87,6 +87,47 @@ Po przeglądzie kodu dodaliśmy kilka poprawek. Nie zmieniły wyników P4, bo w 
 python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --scenario dynamic
 python -m kaucjowicze.plots --input results/campus_dynamic
 python -m kaucjowicze --algorithm aco --map campus --scenario dynamic --seed 200 --gui
+```
+
+Polecenia dla P5 i P6 są na końcu ich sekcji.
+
+## Liczba agentów (P5)
+
+**Pytanie:** jak liczba agentów N wpływa na tempo zbiórki i czy przewaga ACO zależy od N. Zmieniamy tylko N, reszta jak w P1 i P2 (Miasteczko, scenariusz statyczny, ziarna 200–229, T = 20000). Szczegóły są w `ALGORITHM.md` §16.
+
+**N:** 5, 10, 20, 40, 80 (kolejne wartości to podwojenia), razem 450 przebiegów.
+
+**Hipotezy (zapisane przed pomiarem):**
+- t₉₀ maleje z N, a nakład pracy `N · t₉₀` w ACO zaczyna rosnąć przy mniejszym N niż w losowym spacerze, bo ślad ściąga agentów do tych samych skupisk,
+- przewaga ACO jest mała przy N = 5, największa przy średnich N i słabnie przy N = 80.
+
+**Testy:** tylko t₉₀ ACO N1 / losowy spacer, osobno dla każdego N, test Manna-Whitneya z korektą Bonferroniego na 5 testów (próg 0.01).
+
+## Wyniki P5
+
+Średnia ± przedział 95%. Przebieg poniżej 90% liczy się jako T. ✓ oznacza wynik istotny po korekcie Bonferroniego na 5 testów.
+
+| N | t₉₀ losowy | t₉₀ ACO N1 | t₉₀ N2 | losowy / ACO N1 | Nakład N · t₉₀ w ACO N1 | p (t₉₀) |
+|---|---|---|---|---|---|---|
+| 5 | 18283 ± 1392 | 9773 ± 2149 | 8922 ± 2108 | 1.87 | 48866 | 9.5 · 10⁻⁸ ✓ |
+| 10 | 13215 ± 2095 | 3594 ± 905 | 4119 ± 1148 | 3.68 | 35939 | 6.3 · 10⁻⁹ ✓ |
+| 20 | 7257 ± 1588 | 2439 ± 559 | 2360 ± 471 | 2.98 | 48786 | 9.8 · 10⁻⁸ ✓ |
+| 40 | 3841 ± 767 | 1184 ± 311 | 1423 ± 306 | 3.24 | 47359 | 4.3 · 10⁻⁸ ✓ |
+| 80 | 1709 ± 238 | 750 ± 164 | 864 ± 122 | 2.28 | 59992 | 3.0 · 10⁻⁷ ✓ |
+
+**Wnioski:**
+- **ACO N1 jest istotnie szybsze od losowego spaceru przy każdym N** od 5 do 80.
+- **Hipoteza 1 potwierdziła się częściowo.** t₉₀ maleje z N we wszystkich wariantach. Nakład w ACO jest prawie stały od 5 do 40 agentów i rośnie przy 80, co pasuje do tłoku, ale tego nie testowaliśmy. Nie widać, żeby tłok szkodził w ACO wcześniej niż w losowym spacerze.
+- **Hipoteza 2 pasuje do kształtu wyników** (przewaga 1.9, 3–3.7, 2.3), ale nie testowaliśmy, czy stosunki różnią się istotnie.
+- **Przy N = 5 przewaga ACO jest zaniżona:** losowy spacer osiągnął 90% tylko w 7 z 30 przebiegów, a resztę liczymy jako T.
+- **N1 i N2 są równie szybkie przy każdym N**, tak jak w P1 i P2.
+- Kontrola: przebiegi z N = 20 są identyczne z wynikami z P1 i P2.
+
+**Zmiany w kodzie:** opcja `--n-agents` w `experiments.py` (jedna lub kilka wartości, katalog `results/<mapa>_agents`, żeby nie nadpisać wyników domyślnych) i raport P5 w `plots.py` (tabele w `summary.md`, wykresy `p5_*.png`).
+
+```
+python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --n-agents 5 10 20 40 80
+python -m kaucjowicze.plots --input results/campus_agents
 ```
 
 ## Układ puszek (P6)
@@ -128,6 +169,13 @@ Miasteczko, ziarna 200–229, T = 20000. Średnia ± przedział 95%. ✓ oznacza
 - Kontrola: przebiegi układu `current` są identyczne z wynikami z P1 i P2.
 
 **Zmiany w kodzie:** `LAYOUTS` i pole `layout` w `config.py`, opcja `--layout` w `experiments.py` i w podglądzie, kolumna `layout` w `runs.csv`, raport P6 w `plots.py` (kilka katalogów w `--input`, wykresy `p6_*.png`).
+
+```
+for layout in few-large current many-small uniform; do
+  python -m kaucjowicze.experiments --seeds 30 --first-seed 200 --map campus --layout $layout
+done
+python -m kaucjowicze.plots --input results/campus_layout_* --output results/campus_layouts
+```
 
 ## Co zostało do zrobienia
 
